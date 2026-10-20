@@ -1,0 +1,464 @@
+﻿story_id,title,body,labels,sprint
+S1-001,S1-001 - Create Engineering Coding Standards Context Document,"**Outcome:**
+The team publishes an engineering context document describing the conventions developers and AI coding tools should follow when modifying the codebase.
+
+**Technical Guidance:**
+
+The document should address at least:
+
+1. Repository and folder organization.
+2. Naming conventions.
+3. Formatting and linting expectations.
+4. Error-handling conventions.
+5. API or service response conventions where applicable.
+6. Logging expectations.
+7. Expectations for adding dependencies.
+8. Expectations for testing new or changed behavior.
+
+The document should describe the team's actual chosen approach rather than generic software-development advice.
+
+**Rules:** S1-BR-004, S1-BR-007, S1-BR-011",sprint-1,Sprint 1
+S1-002,S1-002 - Create UI/UX Standards Context Document,"**Outcome:**
+The team publishes a UI/UX context document defining the visual and interaction conventions that will keep independently developed ReviewLens features coherent.
+
+**Technical Guidance:**
+
+The document should address at least:
+
+1. Application navigation.
+2. Page layout.
+3. Form conventions.
+4. Validation and error presentation.
+5. Loading and processing states.
+6. Button and action conventions.
+7. Spacing and typography.
+8. Reusable component expectations.
+
+The standards should be specific enough that two developers implementing different pages can produce a recognizably consistent application.
+
+**Rules:** S1-BR-003, S1-BR-015, S1-BR-025",sprint-1,Sprint 1
+S1-003,S1-003 - Create Data and Security Guardrails Context Document,"**Outcome:**
+The team publishes a context document describing ReviewLens ownership boundaries, authentication assumptions, authorization requirements, secret handling, and prohibited data-access patterns.
+
+**Technical Guidance:**
+
+At minimum, the document should explain:
+
+1. Which managed identity provider the team selected.
+2. How provider identity maps to application ownership.
+3. Which entities are user-scoped.
+4. Where authorization is enforced.
+5. Why client-supplied ownership identifiers are not trusted.
+6. How secrets and environment configuration are managed.
+7. How developers will test cross-user isolation.
+
+A new developer or AI coding tool should be able to read this document and understand that every user-owned query and mutation must preserve tenant isolation.
+
+**Rules:** S1-BR-001 through S1-BR-011",sprint-1,Sprint 1
+S1-004,S1-004 - Create AI-Assisted Development and Review Context Document,"**Outcome:**
+The team publishes a context document describing how AI-assisted code is prompted, reviewed, tested, and approved before merge.
+
+**Technical Guidance:**
+
+The document should address:
+
+1. Which AI coding tools the team expects to use.
+2. What context should be supplied to those tools.
+3. Expectations for reviewing generated code.
+4. Expectations for validating generated dependencies or APIs.
+5. Required testing before generated code is accepted.
+6. How AI session transcripts are retained for the project.
+7. Situations where generated code requires additional security review.
+
+AI-generated code is treated as team-authored code and is subject to the same Definition of Done.
+
+**Rules:** S1-BR-004, S1-BR-008, S1-BR-011
+
+---
+
+# B. Project and Delivery Baseline",sprint-1,Sprint 1
+S1-005,S1-005 - Establish Project Structure and Local Development Workflow,"**Outcome:**
+The repository has a stable application structure and documented commands that allow another team member to install dependencies and run the Sprint 1 application locally.
+
+**Technical Guidance:**
+
+The team may choose its architecture and technology stack.
+
+At minimum:
+
+1. Frontend and backend responsibilities must be identifiable.
+2. Persistent storage configuration must be identifiable.
+3. Required installation commands must be documented.
+4. The application must have a repeatable local startup process.
+5. Environment-specific values must not be hard-coded into source files.
+
+A monorepo is allowed but not required.
+
+**Rules:** S1-BR-011",sprint-1,Sprint 1
+S1-006,S1-006 - Configure Code Quality and Automated Test Tooling,"**Outcome:**
+The project has working lint/static-analysis, formatting, and automated unit-test tooling appropriate to the selected technology stack.
+
+**Technical Guidance:**
+
+1. Tool commands must be runnable by any developer from the repository.
+2. Tests must run without requiring manual browser interaction.
+3. At least one meaningful automated test must exist for each application layer where unit testing is appropriate.
+4. Formatting rules should be consistently enforceable rather than depending on individual editor configuration.
+
+**Rules:** Sprint 1 CI/CD and Testing Requirements",sprint-1,Sprint 1
+S1-007,S1-007 - Configure Pull Request Continuous Integration,"**Outcome:**
+Every pull request automatically executes the team's required build, lint/static checks, and unit tests.
+
+**Technical Guidance:**
+
+1. CI must run from committed repository configuration.
+2. Required checks must report success or failure on the pull request.
+3. A deliberately failing test should cause the pipeline to fail.
+4. A build failure should cause the pipeline to fail.
+5. The protected development workflow must prevent normal merge when required checks are failing.
+
+The team may use GitHub Actions or another approved CI platform.
+
+**Rules:** Sprint 1 CI/CD Baseline Gate",sprint-1,Sprint 1
+S1-008,S1-008 - Configure Environment and Secret Management,"**Outcome:**
+Developers can configure local application dependencies without committing secrets, and the repository documents the environment values required to run the system.
+
+**Technical Guidance:**
+
+1. Real secrets must not be committed.
+2. A template such as `.env.example` or equivalent should document required configuration names without exposing credentials.
+3. Authentication-provider credentials must follow the provider's public/private key guidance.
+4. Database and third-party ingestion credentials must be server-side where required.
+5. Missing required configuration should result in an understandable startup or runtime failure.
+
+**Rules:** S1-BR-011
+
+---
+
+# C. Managed Authentication and User Ownership",sprint-1,Sprint 1
+S1-009,S1-009 - Integrate Managed Authentication,"**Outcome:**
+A user can authenticate with the team's selected managed identity provider and establish an authenticated ReviewLens session.
+
+**Technical Guidance:**
+
+The team should use the selected provider's supported SDK or integration mechanism rather than implementing password handling itself.
+
+The application must:
+
+1. Recognize whether the current request or session is authenticated.
+2. Make the provider's stable user identity available to protected backend operations.
+3. Maintain authentication across normal page navigation and refresh according to the provider's supported session model.
+4. Provide a functional logout path.
+
+Provider-hosted or provider-supplied registration and login UI is acceptable.
+
+Teams are not graded on recreating authentication UI that the managed service already provides.
+
+**Rules:** S1-BR-001 through S1-BR-006",sprint-1,Sprint 1
+S1-010,S1-010 - Protect ReviewLens Routes and Backend Operations,"**Outcome:**
+Unauthenticated users cannot access protected ReviewLens pages or protected backend operations.
+
+**Technical Guidance:**
+
+Protection must exist at both relevant boundaries:
+
+1. The UI should prevent or redirect unauthenticated navigation into protected application areas.
+2. The backend must independently reject protected requests that do not contain valid authenticated identity.
+
+A developer must be able to demonstrate that directly calling a protected API without authentication does not succeed.
+
+Expected automated tests should include at least:
+
+1. Authenticated request succeeds.
+2. Unauthenticated request fails.
+3. Protected data is not returned with the failure response.
+
+**Rules:** S1-BR-003, S1-BR-004, S1-BR-006",sprint-1,Sprint 1
+S1-011,S1-011 - Associate User-Owned Data with Authenticated Identity,"**Outcome:**
+When an authenticated user creates a user-owned ReviewLens record, ownership is derived from the verified authenticated identity and persisted with the record.
+
+**Technical Guidance:**
+
+The backend must derive ownership from trusted authentication context.
+
+For example, a request such as:
+
+`POST /analysis-targets`
+
+must not become owned by another user merely because the client submits a different `userId`.
+
+The exact persistence design is the team's decision. Acceptable approaches include:
+
+1. Provider user identifier stored as owner.
+2. Internal User entity mapped to provider identity.
+3. Database-level tenant identity derived from authenticated context.
+
+Whatever approach is selected must be applied consistently to user-scoped records.
+
+**Rules:** S1-BR-005, S1-BR-007, S1-BR-010",sprint-1,Sprint 1
+S1-012,S1-012 - Enforce Cross-User Analysis Target Authorization,"**Outcome:**
+An authenticated user cannot read or modify an AnalysisTarget owned by another authenticated user.
+
+**Technical Guidance:**
+
+Authorization must be enforced even when a user knows or guesses another target's identifier.
+
+Testing should use at least two distinct authenticated user identities:
+
+1. User A creates or owns Target A.
+2. User B attempts to retrieve Target A.
+3. User B attempts a modifying operation against Target A.
+4. Both unauthorized operations are denied.
+5. Target A remains unchanged.
+
+Do not rely on the fact that Target A is absent from User B's UI.
+
+**Rules:** S1-BR-007 through S1-BR-010, S1-BR-016",sprint-1,Sprint 1
+S1-013,S1-013 - Enforce Cross-User Review and Ingestion Authorization,"**Outcome:**
+An authenticated user cannot read, create, modify, or initiate ingestion against review data belonging to another user's AnalysisTarget.
+
+**Technical Guidance:**
+
+Review ownership may be inherited through the AnalysisTarget rather than duplicated on every Review record, but authorization must still be provable.
+
+At minimum, automated tests should demonstrate that User B cannot:
+
+1. Retrieve User A's target reviews.
+2. Submit ingestion against User A's target.
+3. Create review records under User A's target through a protected backend request.
+
+The backend should validate ownership of the parent AnalysisTarget before performing child-resource operations.
+
+**Rules:** S1-BR-007 through S1-BR-010, S1-BR-018
+
+---
+
+# D. Analysis Target Baseline",sprint-1,Sprint 1
+S1-014,S1-014 - Implement AnalysisTarget Persistence Model,"**Outcome:**
+The application can persist and retrieve an AnalysisTarget with its required Sprint 1 fields and authenticated owner relationship.
+
+**Technical Guidance:**
+
+At minimum, an AnalysisTarget must represent:
+
+1. Unique target identifier.
+2. Authenticated owner.
+3. Entity or target name.
+4. Supported review platform.
+5. Source URL or equivalent source reference.
+6. Creation timestamp.
+
+Teams may include additional fields when useful.
+
+The persistence model should support later association with multiple Reviews and ingestion attempts.
+
+Tests should verify that a persisted AnalysisTarget can be retrieved with the expected values and ownership.
+
+**Rules:** S1-BR-012 through S1-BR-017",sprint-1,Sprint 1
+S1-015,S1-015 - Create an Analysis Target,"**Outcome:**
+An authenticated user can create a new AnalysisTarget from the ReviewLens user interface.
+
+**Technical Guidance:**
+
+The application must collect enough information to satisfy the AnalysisTarget persistence model.
+
+Because each team supports only one review platform, the platform may be:
+
+1. Explicitly selected in the UI, or
+2. Fixed by team configuration and displayed to the user.
+
+The backend must assign ownership from authenticated identity.
+
+After successful creation, the user should receive clear confirmation and be able to continue working with the newly created target.
+
+Tests should verify both UI/service behavior and persistence where appropriate.
+
+**Rules:** S1-BR-012 through S1-BR-017",sprint-1,Sprint 1
+S1-016,S1-016 - Validate Analysis Target Input,"**Outcome:**
+The application rejects an AnalysisTarget when required target information is missing or the source information is invalid for the team's supported ingestion approach.
+
+**Technical Guidance:**
+
+Validation should occur at an authoritative backend boundary even if the frontend also validates input.
+
+At minimum, test:
+
+1. Missing target/entity name.
+2. Missing source information.
+3. Clearly malformed source input.
+4. Valid input succeeds.
+
+If the team accepts URLs, the validation should reject values that are not usable URLs.
+
+If the team supports only one platform, teams may additionally validate that submitted URLs reasonably correspond to that platform.
+
+Validation does not need to prove that ingestion will ultimately succeed; actual source accessibility belongs to the ingestion workflow.
+
+**Rules:** S1-BR-012, S1-BR-014, S1-BR-015",sprint-1,Sprint 1
+S1-017,S1-017 - View My Analysis Targets,"**Outcome:**
+An authenticated user can view a list of their persisted AnalysisTargets.
+
+**Technical Guidance:**
+
+The list should provide enough information for a user to identify and select a target.
+
+At minimum, display:
+
+1. Entity/target name.
+2. Supported review platform.
+3. Source reference or a useful representation of it.
+
+The backend query must be constrained by authenticated ownership rather than retrieving all targets and filtering them only in the browser.
+
+Tests should demonstrate:
+
+1. User A sees User A targets.
+2. User B sees User B targets.
+3. User B does not receive User A targets.
+
+**Rules:** S1-BR-007 through S1-BR-010, S1-BR-016",sprint-1,Sprint 1
+S1-018,S1-018 - Open an Analysis Target Workspace,"**Outcome:**
+A user can select one of their AnalysisTargets and open a stable workspace for performing Sprint 1 ingestion operations.
+
+**Technical Guidance:**
+
+The workspace must clearly identify the active target.
+
+At minimum, display:
+
+1. Target/entity name.
+2. Review platform.
+3. Source reference.
+4. Current basic ingestion state when one exists.
+5. An available path to initiate ingestion.
+
+The workspace establishes the context that later sprints will extend with ingestion summary and Q&A functionality.
+
+Direct navigation to a target identifier belonging to another user must be denied by the authorization behavior defined elsewhere in this sprint.
+
+**Rules:** S1-BR-016 through S1-BR-018
+
+---
+
+# E. Review Ingestion Baseline",sprint-1,Sprint 1
+S1-019,S1-019 - Submit Review Source for Ingestion,"**Outcome:**
+An authenticated user can initiate review ingestion for an AnalysisTarget they own using the source mechanism supported by the team.
+
+**Technical Guidance:**
+
+The team may implement either:
+
+1. Ingestion from a publicly accessible target URL, or
+2. A practical data-import mechanism appropriate to the supported review platform.
+
+The ingestion request must reference an existing AnalysisTarget.
+
+Before ingestion begins, the backend must verify:
+
+1. The request is authenticated.
+2. The AnalysisTarget exists.
+3. The authenticated user owns the AnalysisTarget.
+4. Required source information is present.
+
+A request against another user's target must fail before review processing occurs.
+
+**Rules:** S1-BR-018, S1-BR-019, S1-BR-025",sprint-1,Sprint 1
+S1-020,S1-020 - Extract or Import Review Data,"**Outcome:**
+The application can obtain representative review data from the team's supported review source and identify individual review records.
+
+**Technical Guidance:**
+
+At minimum, the ingestion layer must be capable of obtaining:
+
+1. Written review text.
+2. Rating.
+
+Teams may use scraping, browser automation, a publicly available API, supplied export data, or another practical method consistent with the project requirements.
+
+Important constraints:
+
+1. The team must document its selected ingestion approach.
+2. The application must not silently substitute hard-coded sample reviews for real ingestion.
+3. Automated tests should use deterministic fixtures, saved representative input, mocks, or equivalent isolation rather than depending entirely on a live website.
+4. Teams should isolate source-specific parsing sufficiently that it can be tested independently of the user interface.
+
+**Rules:** S1-BR-019 through S1-BR-021, S1-BR-024",sprint-1,Sprint 1
+S1-021,S1-021 - Normalize Ingested Reviews,"**Outcome:**
+Raw review-source data is transformed into the application's canonical Review representation before persistence.
+
+**Technical Guidance:**
+
+Every successfully normalized Review must contain:
+
+1. Review text.
+2. Rating.
+
+Teams should also preserve useful source metadata when available, such as:
+
+1. Source review identifier.
+2. Reviewer/display name.
+3. Review date.
+4. Review URL.
+5. Source-specific metadata useful for later analysis.
+
+Normalization should handle malformed individual records without corrupting otherwise usable data.
+
+Tests should include representative examples of:
+
+1. Valid review.
+2. Missing required review text.
+3. Missing or invalid rating.
+4. Optional metadata that is absent.
+
+The team's handling of invalid individual records should be explicit and consistent.
+
+**Rules:** S1-BR-020, S1-BR-021, S1-BR-024",sprint-1,Sprint 1
+S1-022,S1-022 - Persist Ingested Reviews with Target Ownership,"**Outcome:**
+Successfully normalized Reviews are persisted and associated with the correct AnalysisTarget.
+
+**Technical Guidance:**
+
+The persistence model must support later retrieval of all Reviews belonging to a selected AnalysisTarget.
+
+The system must preserve the ownership boundary transitively through the target.
+
+At minimum, tests should verify:
+
+1. Reviews are persisted after successful ingestion.
+2. Persisted review text and rating match normalized input.
+3. Reviews are associated with the intended AnalysisTarget.
+4. Reviews from Target A do not appear when retrieving Target B.
+5. A user cannot retrieve persisted Reviews through another user's target.
+
+Teams should consider how duplicate source reviews could eventually be identified, but sophisticated re-ingestion and duplicate-resolution behavior is not required in Sprint 1.
+
+**Rules:** S1-BR-007 through S1-BR-010, S1-BR-022",sprint-1,Sprint 1
+S1-023,S1-023 - Record and Report Ingestion Result State,"**Outcome:**
+Each ingestion attempt records enough state for ReviewLens to tell the user whether the operation succeeded or failed.
+
+**Technical Guidance:**
+
+The application should represent an ingestion attempt separately enough that failure does not masquerade as successful persisted review data.
+
+At minimum, the application must be able to distinguish:
+
+1. Ingestion started or processing, if the implementation is asynchronous.
+2. Ingestion succeeded.
+3. Ingestion failed.
+
+A team may additionally support a partial-success state.
+
+For a successful operation, the application should provide at least a basic confirmation that review records were ingested.
+
+For a failed operation:
+
+1. The failure should be visible to the user.
+2. Existing valid data should not be silently replaced with fabricated data.
+3. Technical failure information should be logged appropriately.
+4. User-visible errors should not expose secrets or sensitive internal details.
+
+A detailed ingestion result summary, rating analytics, charts, and dataset analysis are Sprint 2 work.
+
+Tests should include successful and failed ingestion outcomes.
+
+**Rules:** S1-BR-023 through S1-BR-026",sprint-1,Sprint 1

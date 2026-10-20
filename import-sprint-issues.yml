@@ -1,0 +1,235 @@
+name: Import Sprint Issues
+
+on:
+  workflow_dispatch:
+    inputs:
+      csv_path:
+        description: "Path to the sprint issue CSV file in this repository"
+        required: true
+        default: "Sprint1Issues.csv"
+        type: string
+      dry_run:
+        description: "Preview what would be created without creating issues"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  import-issues:
+    name: Import issues from CSV
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Import sprint issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CSV_PATH: ${{ inputs.csv_path }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          python <<'PY'
+          import csv
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          token = os.environ["GITHUB_TOKEN"]
+          repository = os.environ["GITHUB_REPOSITORY"]
+          csv_path = Path(os.environ["CSV_PATH"])
+          dry_run = os.environ["DRY_RUN"].lower() == "true"
+
+          required_columns = {"story_id", "title", "body", "labels", "sprint"}
+
+          def api_request(method, path, payload=None):
+              url = f"https://api.github.com{path}"
+              data = None
+              if payload is not None:
+                  data = json.dumps(payload).encode("utf-8")
+
+              request = urllib.request.Request(
+                  url,
+                  data=data,
+                  method=method,
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "User-Agent": "cs490-sprint-issue-importer",
+                  },
+              )
+
+              try:
+                  with urllib.request.urlopen(request) as response:
+                      body = response.read().decode("utf-8")
+                      return json.loads(body) if body else None
+              except urllib.error.HTTPError as exc:
+                  details = exc.read().decode("utf-8", errors="replace")
+                  raise RuntimeError(
+                      f"GitHub API request failed: {method} {path} "
+                      f"returned HTTP {exc.code}: {details}"
+                  ) from exc
+
+          def get_all_issues():
+              issues = []
+              page = 1
+              while True:
+                  query = urllib.parse.urlencode(
+                      {"state": "all", "per_page": 100, "page": page}
+                  )
+                  batch = api_request(
+                      "GET", f"/repos/{repository}/issues?{query}"
+                  )
+                  if not batch:
+                      break
+
+                  issues.extend(
+                      issue for issue in batch if "pull_request" not in issue
+                  )
+
+                  if len(batch) < 100:
+                      break
+                  page += 1
+
+              return issues
+
+          def get_existing_labels():
+              labels = set()
+              page = 1
+              while True:
+                  query = urllib.parse.urlencode(
+                      {"per_page": 100, "page": page}
+                  )
+                  batch = api_request(
+                      "GET", f"/repos/{repository}/labels?{query}"
+                  )
+                  if not batch:
+                      break
+
+                  labels.update(label["name"] for label in batch)
+
+                  if len(batch) < 100:
+                      break
+                  page += 1
+
+              return labels
+
+          def ensure_labels(label_names, existing_labels):
+              for label in label_names:
+                  if label in existing_labels:
+                      continue
+
+                  if dry_run:
+                      print(f"[DRY RUN] Would create label: {label}")
+                  else:
+                      api_request(
+                          "POST",
+                          f"/repos/{repository}/labels",
+                          {
+                              "name": label,
+                              "color": "5319e7",
+                              "description": "Sprint issue label",
+                          },
+                      )
+                      print(f"Created label: {label}")
+
+                  existing_labels.add(label)
+
+          if not csv_path.exists():
+              print(f"ERROR: CSV file not found: {csv_path}", file=sys.stderr)
+              sys.exit(1)
+
+          with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
+              reader = csv.DictReader(handle)
+
+              missing = required_columns - set(reader.fieldnames or [])
+              if missing:
+                  print(
+                      "ERROR: CSV is missing required column(s): "
+                      + ", ".join(sorted(missing)),
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+
+              rows = list(reader)
+
+          existing_issues = get_all_issues()
+          existing_titles = {issue["title"] for issue in existing_issues}
+          existing_labels = get_existing_labels()
+
+          created = 0
+          skipped = 0
+
+          print(f"Repository: {repository}")
+          print(f"CSV file: {csv_path}")
+          print(f"Rows found: {len(rows)}")
+          print(f"Dry run: {dry_run}")
+          print()
+
+          for row in rows:
+              story_id = row["story_id"].strip()
+              title = row["title"].strip()
+              body = row["body"].strip()
+              labels = [
+                  value.strip()
+                  for value in row["labels"].split(",")
+                  if value.strip()
+              ]
+
+              if not title:
+                  print(f"ERROR: {story_id or 'Unknown story'} has no title.")
+                  sys.exit(1)
+
+              if title in existing_titles:
+                  print(f"SKIP: Issue already exists: {title}")
+                  skipped += 1
+                  continue
+
+              ensure_labels(labels, existing_labels)
+
+              if dry_run:
+                  print(f"[DRY RUN] Would create: {title}")
+              else:
+                  issue = api_request(
+                      "POST",
+                      f"/repos/{repository}/issues",
+                      {
+                          "title": title,
+                          "body": body,
+                          "labels": labels,
+                      },
+                  )
+                  print(f"CREATED: #{issue['number']} {title}")
+
+              existing_titles.add(title)
+              created += 1
+
+          mode = "would be created" if dry_run else "created"
+          print()
+          print(f"Import complete: {created} issue(s) {mode}; {skipped} skipped.")
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as summary:
+                  summary.write("## Sprint Issue Import\n\n")
+                  summary.write(f"- CSV: `{csv_path}`\n")
+                  summary.write(f"- Rows: {len(rows)}\n")
+                  summary.write(f"- Issues {mode}: {created}\n")
+                  summary.write(f"- Existing issues skipped: {skipped}\n")
+                  summary.write(f"- Dry run: `{dry_run}`\n")
+          PY
