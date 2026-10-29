@@ -12,7 +12,11 @@ The service itself doesn't provide a usable place ID, so you'll have to grab tha
 1. Call the 'getGooglePlaceData' function with the place ID argument.  
 2. This function uses SerpAPI and returns the review data in JSON.  
 3. Put this data into the 'extractReviews' function.
-4. This function returns an array of each review's author, rating, and review text.
+4. This function returns a list of dictionaries. Each dictionary holds a review's reviewId, rating, reviewText, author, date, and url fields.
+
+# Notes
+
+A valid review must have a rating and review text; the other fields are optional, and 'extractReviews' will still return them. If a review doesn't have a rating or review text, it won't be returned in the list. 
 
 # Error Handling
 
