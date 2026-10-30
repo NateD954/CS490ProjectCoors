@@ -10,4 +10,4 @@ SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY")
 if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
     raise RuntimeError("SUPABASE_URL or SUPABASE_SECRET_KEY is not set in the .env file. Please check the .env.example file.")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
+supabaseClient: Client = create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
