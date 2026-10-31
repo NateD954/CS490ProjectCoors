@@ -18,6 +18,11 @@ CREATE TABLE public.analysis_targets (
 
     business_name TEXT NOT NULL,
 
+    platform TEXT NOT NULL DEFAULT 'GOOGLE_MAPS'
+        CHECK (platform IN ('GOOGLE_MAPS')),
+
+    source_url TEXT NOT NULL,
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
