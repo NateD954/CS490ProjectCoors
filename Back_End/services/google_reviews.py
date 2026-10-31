@@ -1,13 +1,21 @@
 import os
 import requests
+import re
 
-def getGooglePlaceData(placeId):
+def getGoogleDataIdFromURL(url):
+    pattern = r"0x[0-9a-fA-F]+:0x[0-9a-fA-F]+" # regex pattern to grab the data_id
+    dataId = re.search(pattern, url)
+    if dataId:
+        return dataId.group()
+
+
+def getGooglePlaceData(dataId):
     apiKey = os.getenv('SERPAPI_API_KEY')
-   
+
     # parameters for the API request
     searchParams = {     
         "engine": "google_maps_reviews",
-        "place_id": placeId,
+        "data_id": dataId,
         "api_key": apiKey
     }
 
@@ -21,6 +29,7 @@ def getGooglePlaceData(placeId):
         raise Exception(f"Error from SerpAPI: {response['error']}")
     
     return response
+
 
 # accepts json data from getGooglePlaceData
 # returns a list of reviews with author, rating, and review text
