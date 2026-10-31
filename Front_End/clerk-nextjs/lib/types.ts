@@ -1,28 +1,23 @@
-// Shared shapes. When Supabase is added, make your table columns match these
-// (or map the rows to these shapes inside lib/reviews-service.ts).
+// UI-side view of an AnalysisTarget. The backend owns persistence and
+// assigns the owner from the authenticated identity, so the UI never sends or
+// edits an owner. Keep these field names in sync with the backend teammate's
+// API responses (or map their response to this shape in targets-service.ts).
 
-export type ReviewItem = {
-  id: string;
-  author: string;
-  rating: number; // 1-5
-  text: string;
-  date: string; // ISO string
+export type IngestionStatus = "not_started" | "in_progress" | "completed" | "failed";
+
+export type AnalysisTarget = {
+  id: string; // unique target identifier
+  name: string; // entity / target name
+  platform: string; // supported review platform (display label)
+  sourceUrl: string; // source URL or equivalent reference
+  createdAt: string; // ISO timestamp
+  ingestionStatus: IngestionStatus; // basic ingestion state
+  ingestionMessage?: string; // optional detail, e.g. a failure reason
 };
 
-export type PlaceSummary = {
-  id: string;
+// What the user submits. Platform and owner are NOT part of this: the platform
+// is fixed by team config and the owner comes from the logged-in session.
+export type NewTargetInput = {
   name: string;
-  address: string;
-  rating: number; // average, 1-5
-  reviewCount: number;
-  summary: string; // LLM-written overview
-  topics: string[]; // common themes, e.g. "Friendly staff"
-  reviews: ReviewItem[];
-  searchedAt: string; // ISO string, used for "recent" ordering
-};
-
-export type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
+  sourceUrl: string;
 };
