@@ -73,7 +73,7 @@ export function TargetForm({ onCreated }: { onCreated: (target: AnalysisTarget) 
           value={sourceUrl}
           onChange={(e) => setSourceUrl(e.target.value)}
           error={errors.sourceUrl}
-          hint={`Paste the ${TEAM_PLATFORM.label} page for this business.`}
+          hint={`Open the place in ${TEAM_PLATFORM.label} and copy the full URL from the address bar.`}
         />
         <Button type="submit" loading={submitting}>
           Create target

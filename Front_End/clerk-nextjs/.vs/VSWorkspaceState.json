@@ -1,12 +1,8 @@
 {
   "ExpandedNodes": [
     "",
-    "\\app",
     "\\app\\home",
-    "\\components",
-    "\\components\\ui",
-    "\\lib"
+    "\\components\\ui"
   ],
-  "SelectedNode": "\\components\\SavedPlaces.tsx",
   "PreviewInSolutionExplorer": false
 }
