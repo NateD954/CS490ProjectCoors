@@ -30,3 +30,33 @@ def getTargetForOwner(client, targetId, ownerClerkId):
         .execute()
     )
     return res.data[0] if res.data else None
+
+
+def saveReview(client, targetId, review):
+    """Insert one review for a given target."""
+    row = {
+        "analysis_target_id": targetId,
+        "google_review_id": review["reviewId"],
+        "rating": review["rating"],
+        "review_text": review["reviewText"],
+        "reviewed_at": review["date"],
+    }
+    res = client.table("reviews").insert(row).execute()
+    return res.data[0]
+
+
+# fetch all reviews for a given target, but only if the given owner owns it
+def getReviewsForTarget(client, targetId, ownerClerkId):
+    target = getTargetForOwner(client, targetId, ownerClerkId)
+
+    if target is None:
+        return None
+
+    res = (
+        client.table("reviews")
+        .select("*")
+        .eq("analysis_target_id", targetId)
+        .execute()
+    )
+
+    return res.data
