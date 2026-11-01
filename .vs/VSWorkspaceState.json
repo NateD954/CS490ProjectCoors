@@ -1,11 +1,14 @@
 {
   "ExpandedNodes": [
     "",
-    "\\Front_End",
+    "\\Back_End",
+    "\\Back_End\\app",
+    "\\Back_End\\services",
+    "\\Back_End\\tests",
+    "\\Database",
     "\\Front_End\\clerk-nextjs",
-    "\\Front_End\\clerk-nextjs\\app",
-    "\\src"
+    "\\Front_End\\clerk-nextjs\\app"
   ],
-  "SelectedNode": "\\Front_End\\clerk-nextjs\\app\\layout.tsx",
+  "SelectedNode": "\\Back_End\\app\\auth.py",
   "PreviewInSolutionExplorer": false
 }
