@@ -11,8 +11,7 @@ def getGoogleDataIdFromURL(url):
 
 def getGooglePlaceData(dataId):
     apiKey = os.getenv('SERPAPI_API_KEY')
-    apiKey = apiKey if apiKey else "60cdded92287a7093ec6cc7c5c9722467f658392ac8c97627202d21bc64c2c28"
-
+    
     # parameters for the API request
     searchParams = {     
         "engine": "google_maps_reviews",
@@ -74,12 +73,3 @@ def extractReviews(data):
             "url":    review.get("link")
         })
     return reviews
-
-
-# test with https://www.google.com/maps/place/American+Dream/@40.8091292,-74.0685673,17z/data=!3m1!4b1!4m6!3m5!1s0x89c2f98d2dc94ddd:0x41e8d13cd9b43e7c!8m2!3d40.8091292!4d-74.0685673!16zL20vMGI0dHk2?entry=ttu&g_ep=EgoyMDI2MTAyOC4wIKXMDSoASAFQAw%3D%3D
-if __name__ == "__main__":
-    testUrl = "https://www.google.com/maps/place/American+Dream/@40.8091292,-74.0685673,17z/data=!3m1!4b1!4m6!3m5!1s0x89c2f98d2dc94ddd:0x41e8d13cd9b43e7c!8m2!3d40.8091292!4d-74.0685673!16zL20vMGI0dHk2?entry=ttu&g_ep=EgoyMDI2MTAyOC4wIKXMDSoASAFQAw%3D%3D"
-    dataId = getGoogleDataIdFromURL(testUrl)
-    placeData = getGooglePlaceData(dataId)
-    reviews = extractReviews(placeData)
-    print(len(reviews))
