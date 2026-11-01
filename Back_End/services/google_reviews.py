@@ -1,7 +1,6 @@
 import os
 import requests
 import re
-from app.target_repository import createIngestionJob, markIngestionCompleted, markIngestionFailed, markIngestionRunning, saveReview
 
 def getGoogleDataIdFromURL(url):
     pattern = r"0x[0-9a-fA-F]+:0x[0-9a-fA-F]+" # regex pattern to grab the data_id
@@ -74,23 +73,3 @@ def extractReviews(data):
             "url":    review.get("link")
         })
     return reviews
-
-def ingestGoogleReviews(client, targetId, dataId):
-    job = createIngestionJob(client, targetId)
-
-    try:
-        markIngestionRunning(client, job["id"])
-
-        data = getGooglePlaceData(dataId)
-        reviews = extractReviews(data)
-
-        for review in reviews:
-            saveReview(client, targetId, review)
-
-        markIngestionCompleted(client, job["id"], len(reviews))
-
-        return reviews
-
-    except Exception as error:
-        markIngestionFailed(client, job["id"], str(error))
-        raise
