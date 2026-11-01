@@ -3,3 +3,5 @@
 __pycache__/
 venv/
 .pytest_cache/
+Back_End/.venv/
+Back_End/.pytest_cache/

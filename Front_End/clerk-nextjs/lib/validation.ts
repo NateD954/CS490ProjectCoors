@@ -1,13 +1,12 @@
-import { MAX_NAME_LENGTH, TEAM_PLATFORM } from "./config";
+import { GOOGLE_PLACE_DATA_ID, MAX_NAME_LENGTH, TEAM_PLATFORM } from "./config";
 import type { NewTargetInput } from "./types";
 
 export type FieldErrors = Partial<Record<keyof NewTargetInput, string>>;
 
 export const hasErrors = (e: FieldErrors) => Object.keys(e).length > 0;
 
-// Frontend validation for fast feedback. The backend MUST validate again:
-// it is the authoritative boundary. Server-side field errors are displayed
-// by the form too (see TargetValidationError in targets-service.ts).
+// Frontend validation for fast feedback. The backend is still the authority;
+// its field errors are displayed by the form too (see TargetValidationError).
 export function validateTargetInput(input: NewTargetInput): FieldErrors {
   const errors: FieldErrors = {};
   const name = input.name.trim();
@@ -17,7 +16,7 @@ export function validateTargetInput(input: NewTargetInput): FieldErrors {
   else if (name.length > MAX_NAME_LENGTH) errors.name = `Keep the name under ${MAX_NAME_LENGTH} characters.`;
 
   if (!url) {
-    errors.sourceUrl = "Enter the link to the review page.";
+    errors.sourceUrl = "Enter the link to the reviews.";
   } else {
     let parsed: URL | null = null;
     try {
@@ -30,7 +29,11 @@ export function validateTargetInput(input: NewTargetInput): FieldErrors {
     } else {
       const host = parsed.hostname.toLowerCase();
       const matches = TEAM_PLATFORM.hostSuffixes.some((s) => host === s || host.endsWith(`.${s}`));
-      if (!matches) errors.sourceUrl = `This doesn't look like a ${TEAM_PLATFORM.label} link.`;
+      if (!matches) {
+        errors.sourceUrl = `This doesn't look like a ${TEAM_PLATFORM.label} link.`;
+      } else if (!GOOGLE_PLACE_DATA_ID.test(url)) {
+        errors.sourceUrl = `Use the full ${TEAM_PLATFORM.label} link for the place: open it in ${TEAM_PLATFORM.label} and copy the URL from the address bar.`;
+      }
     }
   }
   return errors;

@@ -30,3 +30,15 @@ def getTargetForOwner(client, targetId, ownerClerkId):
         .execute()
     )
     return res.data[0] if res.data else None
+
+
+def listTargetsForOwner(client, ownerClerkId):
+    """Every target the given owner has, newest first."""
+    res = (
+        client.table(TABLE)
+        .select("*")
+        .eq("owner_clerk_id", ownerClerkId)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return res.data
