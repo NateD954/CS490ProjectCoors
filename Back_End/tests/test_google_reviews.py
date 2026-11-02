@@ -4,9 +4,9 @@ def test_extract_reviews():
     fakeData = {
         "reviews": [
             {
-                "user": {"name": "Bob"},
+                "author_name": "Bob",
                 "rating": 5,
-                "snippet": "This is one of the places of all time."
+                "review_text": "This is one of the places of all time."
             }
         ]
     }
@@ -24,10 +24,10 @@ def test_valid_review():
             {
                 "review_id": "123",
                 "rating": 5,
-                "snippet": "Great place",
-                "user": {"name": "Bob"},
-                "iso_date": "2026-10-28",
-                "link": "example.com"
+                "review_text": "Great place",
+                "author_name": "Bob",
+                "review_datetime_utc": "2026-10-28",
+                "review_link": "example.com"
             }
         ]
     }
@@ -57,7 +57,7 @@ def test_invalid_rating():
         "reviews": [
             {
                 "rating": 6,
-                "snippet": "Great place"
+                "review_text": "Great place"
             }
         ]
     }
@@ -73,7 +73,7 @@ def test_missing_optional_fields():
         "reviews": [
             {
                 "rating": 5,
-                "snippet": "Great place"
+                "review_text": "Great place"
             }
         ]
     }
