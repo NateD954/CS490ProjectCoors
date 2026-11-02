@@ -13,7 +13,7 @@
 //   POST /api/targets/{id}/ingest     run the scraper for a target
 // ---------------------------------------------------------------------------
 import { PLATFORM_LABELS, TEAM_PLATFORM } from "./config";
-import type { AnalysisTarget, IngestionStatus, NewTargetInput } from "./types";
+import type { AnalysisTarget, IngestionStatus, NewTargetInput, Review } from "./types";
 import { hasErrors, validateTargetInput, type FieldErrors } from "./validation";
 
 const BASE = "/api/backend";
@@ -186,4 +186,31 @@ export async function startIngestion(id: string): Promise<AnalysisTarget> {
   const target = await getTarget(id);
   if (!target) throw new Error("This target no longer exists.");
   return target;
+}
+
+// ----- Reviews for the workspace (paged) -----------------------------------
+
+export const REVIEWS_PAGE_SIZE = 5;
+
+type ReviewRow = { id: string; rating: number; review_text: string | null; reviewed_at: string | null };
+
+// Loads one page of stored reviews, newest first. It asks for one extra row so it can
+// tell whether another page exists without a second request.
+export async function listReviews(
+  targetId: string,
+  offset: number,
+  limit: number = REVIEWS_PAGE_SIZE
+): Promise<{ reviews: Review[]; hasMore: boolean }> {
+  const rows = await request<ReviewRow[]>(
+    `/targets/${encodeURIComponent(targetId)}/reviews?limit=${limit + 1}&offset=${offset}`
+  );
+  return {
+    reviews: rows.slice(0, limit).map((r) => ({
+      id: r.id,
+      rating: r.rating,
+      text: r.review_text ?? "",
+      date: r.reviewed_at,
+    })),
+    hasMore: rows.length > limit,
+  };
 }

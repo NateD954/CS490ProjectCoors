@@ -7,6 +7,6 @@
     "\\Back_End\\tests",
     "\\Database"
   ],
-  "SelectedNode": "\\.gitignore",
+  "SelectedNode": "\\Back_End\\tests\\test_ingest_endpoint.py",
   "PreviewInSolutionExplorer": false
 }

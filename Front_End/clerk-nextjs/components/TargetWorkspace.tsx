@@ -8,6 +8,7 @@ import { Card, Section } from "./ui/Card";
 import { Button } from "./ui/Button";
 import { Spinner } from "./ui/Spinner";
 import { StatusBadge } from "./ui/StatusBadge";
+import { ReviewList } from "./ReviewList";
 import { useToast } from "./ui/Toast";
 
 type LoadState = "loading" | "ready" | "missing" | "error";
@@ -26,6 +27,7 @@ export function TargetWorkspace({ id }: { id: string }) {
   const [target, setTarget] = useState<AnalysisTarget | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [starting, setStarting] = useState(false);
+  const [ingestionRuns, setIngestionRuns] = useState(0);
 
   const load = useCallback(() => {
     getTarget(id)
@@ -54,6 +56,7 @@ export function TargetWorkspace({ id }: { id: string }) {
     const loadingId = toast.loading("Starting ingestion. Please wait.");
     try {
       setTarget(await startIngestion(target.id));
+      setIngestionRuns((n) => n + 1);
       toast.success("Ingestion started. This page updates when it finishes.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start ingestion. Please try again.");
@@ -137,6 +140,11 @@ export function TargetWorkspace({ id }: { id: string }) {
             {label}
           </Button>
         </Card>
+      </Section>
+
+      <Section title="Reviews" hint="Newest first.">
+        {/* The key makes the list reload whenever ingestion runs or its state changes. */}
+        <ReviewList key={`${target.ingestionStatus}-${ingestionRuns}`} targetId={target.id} />
       </Section>
 
       <Section title="Summary and questions">
