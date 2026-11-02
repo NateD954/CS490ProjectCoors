@@ -1,10 +1,11 @@
 import logging
 import requests
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi.middleware.cors import CORSMiddleware
 from app.db import supabaseClient
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from app.auth import getCurrentUserId
 from app.target_repository import saveTarget, listTargetsForOwner
@@ -118,10 +119,24 @@ def getTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
     return withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
 
 @app.get("/api/targets/{targetId}/reviews")
-def getTargetReviews(targetId: str, userId: str = Depends(getCurrentUserId)):
+def getTargetReviews(
+    targetId: str,
+    userId: str = Depends(getCurrentUserId),
+    limit: Optional[int] = Query(None, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
     verifyTargetOwnership(targetId, userId)
-    reviewsRes = supabaseClient.table("reviews").select("*").eq("analysis_target_id", targetId).execute()
-    return reviewsRes.data
+    # Newest first (reviews with no date last); id keeps the order stable between pages.
+    query = (
+        supabaseClient.table("reviews")
+        .select("*")
+        .eq("analysis_target_id", targetId)
+        .order("reviewed_at", desc=True, nullsfirst=False)
+        .order("id")
+    )
+    if limit is not None:  # without a limit, every review is returned as before
+        query = query.range(offset, offset + limit - 1)
+    return query.execute().data
 
 @app.post("/api/targets/{targetId}/ingest")
 def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):

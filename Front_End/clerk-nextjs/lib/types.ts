@@ -21,3 +21,12 @@ export type NewTargetInput = {
   name: string;
   sourceUrl: string;
 };
+
+// One stored review, as shown in the workspace. The reviews table does not keep
+// the reviewer's name, so only rating, text and date are available.
+export type Review = {
+  id: string;
+  rating: number; // 1-5
+  text: string;
+  date: string | null; // ISO timestamp when Google gave one
+};
