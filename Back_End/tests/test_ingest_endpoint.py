@@ -71,8 +71,8 @@ def test_ingestion_completes(monkeypatch):
             "reviews": [{
                 "review_id": "review-1",
                 "rating": 5,
-                "snippet": "Great place",
-                "iso_date": "2026-10-31"
+                "review_text": "Great place",
+                "review_datetime_utc": "2026-10-31"
             }]
         }
     )
