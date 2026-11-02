@@ -1,5 +1,6 @@
 import logging
 import requests
+from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -72,6 +73,15 @@ def withIngestionStatus(targets: list) -> list:
         t["ingestion_error"] = error
     return targets
 
+def isGoogleUrl(url: str) -> bool:
+    """True for an http(s) link whose host is google.com or one of its subdomains."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme in ("http", "https") and (host == "google.com" or host.endswith(".google.com"))
+
 def nowIso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -101,7 +111,7 @@ def createTarget(body: TargetCreateRequest, userId: str = Depends(getCurrentUser
     errors = []
     if not name:
         errors.append(fieldError("name", "Enter the business or location name."))
-    if not sourceUrl.lower().startswith(("http://", "https://")) or not dataId:
+    if not isGoogleUrl(sourceUrl) or not dataId:
         errors.append(fieldError("sourceUrl", "Enter the full Google Maps link for the place."))
     if body.platform != "GOOGLE_MAPS":
         errors.append(fieldError("platform", "Unsupported review platform."))
