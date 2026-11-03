@@ -1,16 +1,16 @@
 {
   "ExpandedNodes": [
     "",
+    "\\Back_End",
+    "\\Back_End\\services",
+    "\\Back_End\\tests",
     "\\Front_End",
     "\\Front_End\\clerk-nextjs",
-    "\\Front_End\\clerk-nextjs\\app",
-    "\\Front_End\\clerk-nextjs\\app\\api",
-    "\\Front_End\\clerk-nextjs\\app\\api\\backend",
-    "\\Front_End\\clerk-nextjs\\app\\api\\backend\\[...path]",
-    "\\Front_End\\clerk-nextjs\\app\\home",
-    "\\Front_End\\clerk-nextjs\\app\\targets",
-    "\\Front_End\\clerk-nextjs\\app\\targets\\[id]"
+    "\\Front_End\\clerk-nextjs\\components",
+    "\\Front_End\\clerk-nextjs\\lib",
+    "\\Front_End\\clerk-nextjs\\public",
+    "\\Front_End\\clerk-nextjs\\tests"
   ],
-  "SelectedNode": "\\Back_End\\requirements.txt",
+  "SelectedNode": "\\Front_End\\clerk-nextjs\\app\\api\\backend\\[...path]\\route.ts",
   "PreviewInSolutionExplorer": false
 }

@@ -1,8 +1,16 @@
 {
   "ExpandedNodes": [
     "",
-    "\\app\\home",
-    "\\components\\ui"
+    "\\app",
+    "\\app\\api",
+    "\\app\\api\\backend",
+    "\\app\\api\\backend\\[...path]",
+    "\\components",
+    "\\components\\ui",
+    "\\lib",
+    "\\public",
+    "\\tests"
   ],
+  "SelectedNode": "\\components\\ui",
   "PreviewInSolutionExplorer": false
 }
