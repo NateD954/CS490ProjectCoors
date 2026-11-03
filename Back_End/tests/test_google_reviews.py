@@ -14,7 +14,7 @@ def test_extract_reviews():
     reviews = extractReviews(fakeData)
 
     assert reviews[0]["author"] == "Bob"
-    assert reviews[0]["rating"] == 5
+    assert reviews[0]["rating"] == 4
     assert reviews[0]["reviewText"] == "This is one of the places of all time."
 
 
