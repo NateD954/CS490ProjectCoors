@@ -36,7 +36,7 @@ If you are using a new Supabase project, run Database/schema.sql in the Supabase
     python -m pip install -r requirements-dev.txt
 
 
-Create Back\_End.env with these values:
+Create a Root .env with these values:
 
 &#x20;   SUPABASE\_URL=
     SUPABASE\_SECRET\_KEY=
@@ -91,7 +91,7 @@ Use python -m pytest instead of plain pytest so the app and services folders are
 
 * Scripts are disabled: run the Set-ExecutionPolicy line again in the current window.
 * No module named pytest: you are not in Back\_End or the venv is not active.
-* SUPABASE\_URL is not set: Back\_End.env is missing or in the wrong folder.
+* SUPABASE\_URL is not set: .env is missing or in the wrong folder.
 * Backend server could not be reached: the backend is not running, or BACKEND\_URL is wrong.
 * 401 on every request: the Clerk keys do not match, or you are signed out.
 * Ingestion returns 502: the reviews API key is wrong, or the Maps URL has no place id.
