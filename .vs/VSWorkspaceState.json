@@ -1,12 +1,16 @@
 {
   "ExpandedNodes": [
     "",
-    "\\Back_End",
-    "\\Back_End\\app",
-    "\\Back_End\\services",
-    "\\Back_End\\tests",
-    "\\Database"
+    "\\Front_End",
+    "\\Front_End\\clerk-nextjs",
+    "\\Front_End\\clerk-nextjs\\app",
+    "\\Front_End\\clerk-nextjs\\app\\api",
+    "\\Front_End\\clerk-nextjs\\app\\api\\backend",
+    "\\Front_End\\clerk-nextjs\\app\\api\\backend\\[...path]",
+    "\\Front_End\\clerk-nextjs\\app\\home",
+    "\\Front_End\\clerk-nextjs\\app\\targets",
+    "\\Front_End\\clerk-nextjs\\app\\targets\\[id]"
   ],
-  "SelectedNode": "\\Back_End\\tests\\test_ingest_endpoint.py",
+  "SelectedNode": "\\Back_End\\requirements.txt",
   "PreviewInSolutionExplorer": false
 }

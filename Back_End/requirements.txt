@@ -1,0 +1,11 @@
+# Runtime packages for the ReviewLens backend (FastAPI).
+# Install with: python -m pip install -r requirements.txt
+
+fastapi>=0.110,<1          # web framework (app/main.py)
+uvicorn[standard]>=0.29,<1 # server that runs the app
+pydantic>=2,<3             # request models (imported directly in app/main.py)
+supabase>=2,<3             # database client (app/db.py)
+python-dotenv>=1,<2        # loads the .env file
+pyjwt[crypto]>=2.8,<3      # verifies Clerk tokens (app/auth.py); [crypto] adds RS256 support
+httpx>=0.27,<1             # fetches Clerk's signing keys (app/auth.py)
+requests>=2.31,<3          # calls the OpenWeb Ninja reviews API (services/google_reviews.py)
