@@ -48,7 +48,7 @@ jobs:
         run: python -m pytest -q
 
   frontend-checks:
-    name: Frontend checks (lint and build)
+    name: Frontend checks (lint, test and build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -62,7 +62,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: Front_End/clerk-nextjs/package-lock.json
 
@@ -71,6 +71,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Test
+        run: npm test
 
       # next build also runs the TypeScript type check
       - name: Build
