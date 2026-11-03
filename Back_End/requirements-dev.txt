@@ -1,0 +1,5 @@
+# Everything needed to run the backend tests, locally and in CI.
+# Install with: python -m pip install -r requirements-dev.txt
+
+-r requirements.txt
+pytest>=8,<10
