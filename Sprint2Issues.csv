@@ -1,0 +1,402 @@
+﻿story_id,title,body,labels,sprint
+S2-001,S2-001 - Add Changed-Code Coverage Gate,"**Outcome:**
+The CI pipeline measures automated test coverage for changed or newly added code and rejects a pull request that fails the team's required threshold.
+
+**Technical Guidance:**
+
+The team may select an appropriate coverage tool and threshold for its technology stack.
+
+The objective is not to maximize a vanity percentage. The objective is to prevent significant new behavior from entering the codebase without automated verification.
+
+The team should document:
+
+1. The selected coverage mechanism.
+2. The required threshold or policy.
+3. Which code is excluded and why, if exclusions exist.
+4. How a developer can run the coverage check locally.
+
+A deliberately under-tested change should be capable of causing the gate to fail.
+
+**Rules:** S2-BR-027 through S2-BR-031",sprint-2,Sprint 2
+S2-002,S2-002 - Add Critical Integration Test Coverage,"**Outcome:**
+The project contains automated integration tests covering important Sprint 2 boundaries between application services, persistence, ingestion data, and Q&A orchestration.
+
+**Technical Guidance:**
+
+Integration tests should focus on boundaries where independently correct components could still fail when combined.
+
+Representative areas include:
+
+1. Loading persisted reviews for an AnalysisTarget.
+2. Computing an ingestion summary from persisted data.
+3. Passing the correct review dataset into the Q&A service.
+4. Applying authenticated ownership before review retrieval.
+5. Changing the active target and retrieving different data.
+
+The exact testing technology is the team's decision.
+
+**Rules:** S2-BR-001 through S2-BR-014, S2-BR-022 through S2-BR-030",sprint-2,Sprint 2
+S2-003,S2-003 - Create Deterministic Q&A Test Harness,"**Outcome:**
+The team can automatically test ReviewLens Q&A orchestration without depending on unpredictable live-model output.
+
+**Technical Guidance:**
+
+The test harness should make it possible to verify what the application sends to and receives from the model boundary.
+
+Possible approaches include:
+
+1. Mock LLM client.
+2. Stubbed model adapter.
+3. Recorded model responses.
+4. Dependency injection around the AI provider.
+5. Equivalent controlled testing approach.
+
+Tests should be able to verify:
+
+1. Correct system instructions are supplied.
+2. Correct review context is supplied.
+3. Wrong-target reviews are not supplied.
+4. Cross-user reviews are not supplied.
+5. Application behavior is correct for controlled model responses.
+
+The test architecture should not require developers to spend money on model API calls every time CI runs.
+
+**Rules:** S2-BR-009 through S2-BR-014, S2-BR-022, S2-BR-027 through S2-BR-031",sprint-2,Sprint 2
+S2-004,S2-004 - Create Scope-Guard Evaluation Set,"**Outcome:**
+The team maintains a repeatable set of representative questions used to verify ReviewLens scope behavior.
+
+**Technical Guidance:**
+
+The evaluation set must include multiple examples from at least these categories:
+
+1. Clearly in-scope review questions.
+2. Relevant questions for which the dataset lacks sufficient evidence.
+3. General world-knowledge questions.
+4. Questions about another product or entity.
+5. Questions about another review platform.
+
+The evaluation should determine whether the behavior is acceptable without requiring one exact answer sentence.
+
+The team may implement the evaluation as automated tests, structured fixtures, an evaluation script, or a combination.
+
+A small, thoughtful evaluation set is preferable to a large set of redundant examples.
+
+**Rules:** S2-BR-015 through S2-BR-021, S2-BR-027 through S2-BR-031",sprint-2,Sprint 2
+S2-005,S2-005 - Display Ingestion Result Status,"**Outcome:**
+The AnalysisTarget workspace clearly communicates the result state of the ingestion operation associated with the active dataset.
+
+**Technical Guidance:**
+
+The user must be able to distinguish at least:
+
+1. Successful ingestion.
+2. Failed ingestion.
+
+If the team's Sprint 1 implementation supports partial success, the UI should represent that state distinctly.
+
+If ingestion is asynchronous, a processing state should also be represented.
+
+The displayed result should come from persisted ingestion state rather than being inferred solely from the presence of review rows.
+
+**Rules:** S2-BR-001, S2-BR-005 through S2-BR-007",sprint-2,Sprint 2
+S2-006,S2-006 - Display Review Count and Rating Summary,"**Outcome:**
+The user can see the number of successfully ingested reviews and basic rating information for the active AnalysisTarget.
+
+**Technical Guidance:**
+
+At minimum, display:
+
+1. Number of successfully ingested reviews.
+2. Basic rating information appropriate to the selected review platform.
+
+Examples of appropriate rating information include:
+
+1. Average rating.
+2. Rating distribution.
+3. Counts by rating value.
+
+The team does not need to implement every possible metric.
+
+All displayed values must be calculated from persisted review data.
+
+Tests should use a known review fixture so expected values can be asserted exactly.
+
+**Rules:** S2-BR-001 through S2-BR-004, S2-BR-007",sprint-2,Sprint 2
+S2-007,S2-007 - Report Skipped or Rejected Review Records,"**Outcome:**
+When ingestion encounters individual records that cannot be processed, the user can determine that those records were not included in the active review dataset.
+
+**Technical Guidance:**
+
+The application does not need to expose raw parser diagnostics to the user.
+
+A reasonable summary may communicate:
+
+1. Number successfully ingested.
+2. Number skipped or rejected.
+3. A concise reason category when useful.
+
+For example:
+
+- missing review text
+- invalid rating
+- malformed source record
+
+The exact level of detail is a team design decision.
+
+The important requirement is that unsuccessful records do not silently count as successfully analyzed data.
+
+**Rules:** S2-BR-005 through S2-BR-007",sprint-2,Sprint 2
+S2-008,S2-008 - Derive Summary from the Active Persisted Dataset,"**Outcome:**
+The ingestion summary accurately represents the same persisted review dataset that will be used by Q&A.
+
+**Technical Guidance:**
+
+The summary should not be separately generated from stale source data, browser-only state, or LLM interpretation.
+
+Tests should demonstrate that:
+
+1. Adding or removing a persisted test Review changes the calculated summary appropriately.
+2. Target A summary uses Target A reviews.
+3. Target B summary uses Target B reviews.
+4. User A cannot retrieve User B's summary.
+
+This story establishes a common data boundary between ingestion and analysis.
+
+**Rules:** S2-BR-001 through S2-BR-007, S2-BR-022, S2-BR-026",sprint-2,Sprint 2
+S2-009,S2-009 - Build the Review Q&A Interface,"**Outcome:**
+A user can submit a natural-language question from the active AnalysisTarget workspace and receive a ReviewLens response.
+
+**Technical Guidance:**
+
+At minimum, the interface should include:
+
+1. Question input.
+2. Submit action.
+3. Processing/loading state.
+4. Response display.
+5. Meaningful error state if the AI request fails.
+
+A full persistent chat-history system is not required.
+
+A simple question-and-response interaction is acceptable if it supports the required analysis workflow.
+
+The active AnalysisTarget must remain clear while the user asks questions.
+
+**Rules:** S2-BR-008, S2-BR-014",sprint-2,Sprint 2
+S2-010,S2-010 - Build Review Dataset Context for Q&A,"**Outcome:**
+Before a question is submitted to the LLM, ReviewLens constructs AI context from reviews belonging to the active AnalysisTarget.
+
+**Technical Guidance:**
+
+The team must make an explicit architectural decision for selecting and supplying review context.
+
+Possible approaches include:
+
+1. Supplying all reviews when the dataset is small enough.
+2. Selecting relevant reviews before model invocation.
+3. Retrieval-Augmented Generation.
+4. Embeddings and vector search.
+5. Search or filtering strategies.
+6. Another defensible approach appropriate to the team's dataset size.
+
+No particular retrieval architecture is required.
+
+The implementation must ensure:
+
+1. Context comes from persisted ReviewLens data.
+2. Context belongs to the active AnalysisTarget.
+3. Context belongs to the authenticated user.
+4. Context does not accidentally include a previously selected target.
+
+The team should document important context-size or model-token limitations.
+
+**Rules:** S2-BR-009, S2-BR-012 through S2-BR-014, S2-BR-022 through S2-BR-026",sprint-2,Sprint 2
+S2-011,S2-011 - Answer Questions from Review Evidence,"**Outcome:**
+For an in-scope question supported by the active review dataset, ReviewLens produces a useful answer based on those reviews.
+
+**Technical Guidance:**
+
+Representative questions might include:
+
+- What complaints appear most frequently?
+- What do customers like about this product?
+- Are there recurring complaints about customer service?
+- What themes appear in low-rated reviews?
+- What reasons do reviewers give for high ratings?
+
+The exact wording and presentation of answers are team design decisions.
+
+The team should design the system prompt and review context so that the model treats supplied reviews as its evidence base.
+
+The application is not expected to produce mathematically perfect natural-language analysis, but answers should be defensibly connected to the review content.
+
+**Rules:** S2-BR-008 through S2-BR-014",sprint-2,Sprint 2
+S2-012,S2-012 - Handle Questions with Insufficient Review Evidence,"**Outcome:**
+When a question is within the general review-analysis domain but the active dataset does not contain sufficient information to answer it, ReviewLens communicates that limitation.
+
+**Technical Guidance:**
+
+Example:
+
+The reviews discuss food quality and service, but the user asks:
+
+> ""Do customers think the parking lot is safe at night?""
+
+If the reviews provide no evidence about parking safety, ReviewLens should not infer an answer from general knowledge.
+
+The system prompt should explicitly instruct the model to distinguish:
+
+1. Information supported by the reviews.
+2. Information absent from the reviews.
+
+Tests should include a controlled dataset where the absence of evidence is known.
+
+**Rules:** S2-BR-010, S2-BR-011, S2-BR-015",sprint-2,Sprint 2
+S2-013,S2-013 - Define and Apply the ReviewLens System Prompt,"**Outcome:**
+Every ReviewLens Q&A request uses a system prompt that explicitly constrains the assistant to the active review dataset.
+
+**Technical Guidance:**
+
+The system prompt should communicate at least:
+
+1. Which product/entity is currently being analyzed.
+2. Which review platform supplied the data.
+3. That answers must be based on the supplied review dataset.
+4. That unsupported information must not be invented.
+5. That unrelated general-knowledge questions must be declined.
+6. That questions about another product, entity, or unsupported platform must be declined.
+
+The prompt may contain additional instructions selected by the team.
+
+Prompt text should be maintained in source control or another reviewable configuration location.
+
+It should not exist only as an undocumented string entered manually in a hosted AI console.
+
+**Rules:** S2-BR-015 through S2-BR-021",sprint-2,Sprint 2
+S2-014,S2-014 - Reject General-Knowledge Questions,"**Outcome:**
+ReviewLens gracefully declines questions that are unrelated to the active review dataset.
+
+**Technical Guidance:**
+
+Representative examples include:
+
+- What is the weather today?
+- Who is the President of the United States?
+- Write a Python sorting algorithm.
+- What are the best restaurants in New York?
+
+The refusal should make the ReviewLens scope clear and may invite the user to ask a question about the active reviews.
+
+The team should not implement these examples as a hard-coded blacklist.
+
+The behavior should arise primarily from the system prompt and application context.
+
+**Rules:** S2-BR-015, S2-BR-016, S2-BR-019 through S2-BR-021",sprint-2,Sprint 2
+S2-015,S2-015 - Reject Questions About Another Entity or Platform,"**Outcome:**
+ReviewLens declines questions that request analysis of a product, entity, or review platform not represented in the active dataset.
+
+**Technical Guidance:**
+
+For example, if the active target represents Google Maps reviews for Restaurant A, ReviewLens should not answer:
+
+- What do customers think about Restaurant B?
+- What are Restaurant A's Yelp reviews like?
+- How does Restaurant A compare with Restaurant B based on Amazon reviews?
+
+A comparison may be answered only when the required evidence actually exists within the active ReviewLens dataset.
+
+Tests should include both obvious and reasonably phrased out-of-scope examples.
+
+**Rules:** S2-BR-017 through S2-BR-021",sprint-2,Sprint 2
+S2-016,S2-016 - Prevent Cross-User Data from Entering AI Context,"**Outcome:**
+The Q&A orchestration layer cannot supply another authenticated user's review data to the LLM.
+
+**Technical Guidance:**
+
+This is a backend security requirement, not merely a UI requirement.
+
+Automated tests should use at least two users and two datasets.
+
+For example:
+
+1. User A owns Target A containing a distinctive review phrase.
+2. User B owns Target B.
+3. User B asks a question designed to expose the distinctive Target A content.
+4. Target A reviews are not included in User B's AI context.
+5. The response does not obtain Target A information through the application's Q&A pipeline.
+
+Where practical, tests should inspect or capture the context passed to the mocked LLM boundary rather than judging security only from generated prose.
+
+**Rules:** S2-BR-022, S2-BR-026 through S2-BR-030",sprint-2,Sprint 2
+S2-017,S2-017 - Switch the Active AnalysisTarget,"**Outcome:**
+A user can move from one owned AnalysisTarget to another and clearly see which target is currently active.
+
+**Technical Guidance:**
+
+The active target should be represented consistently across:
+
+1. Target workspace.
+2. Ingestion summary.
+3. Q&A interface.
+
+A user should not have to infer which review dataset is being analyzed.
+
+Direct selection of another user's target remains prohibited by Sprint 1 authorization rules.
+
+**Rules:** S2-BR-001, S2-BR-014, S2-BR-022 through S2-BR-026",sprint-2,Sprint 2
+S2-018,S2-018 - Change Q&A Context When the Target Changes,"**Outcome:**
+After the user switches AnalysisTargets, subsequent Q&A uses the newly selected target's reviews.
+
+**Technical Guidance:**
+
+Automated tests should create clearly distinguishable datasets.
+
+For example:
+
+- Target A reviews repeatedly mention ""battery life.""
+- Target B reviews repeatedly mention ""customer service.""
+
+After switching from Target A to Target B:
+
+1. New AI context should contain Target B review data.
+2. Target A review data should no longer be supplied.
+3. Summary information should correspond to Target B.
+4. The UI should clearly identify Target B as active.
+
+**Rules:** S2-BR-023, S2-BR-024",sprint-2,Sprint 2
+S2-019,S2-019 - Prevent Stale Review Context,"**Outcome:**
+ReviewLens does not accidentally retain reviews from a previously active AnalysisTarget when processing a new question.
+
+**Technical Guidance:**
+
+This requirement applies regardless of whether the team stores Q&A state:
+
+1. In frontend state.
+2. In backend session state.
+3. In a database.
+4. In a retrieval index.
+5. Through an external AI service.
+
+The team should explicitly test the transition between targets rather than testing each target only in isolation.
+
+If the implementation caches review context, cache keys and invalidation must preserve target and user boundaries.
+
+**Rules:** S2-BR-022 through S2-BR-024",sprint-2,Sprint 2
+S2-020,S2-020 - Handle a Target Without Review Data,"**Outcome:**
+When an AnalysisTarget has no successfully ingested review dataset, ReviewLens does not present normal review-grounded Q&A as though data were available.
+
+**Technical Guidance:**
+
+The application should provide a clear state such as:
+
+- No reviews have been ingested.
+- The most recent ingestion failed.
+- Complete ingestion before asking ReviewLens questions.
+
+The exact UX is a team decision.
+
+The important requirement is that the LLM must not substitute general knowledge because ReviewLens has no review context.
+
+Tests should verify that an empty target does not result in a normal grounded-answer workflow.
+
+**Rules:** S2-BR-007, S2-BR-010, S2-BR-011, S2-BR-025",sprint-2,Sprint 2
