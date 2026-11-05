@@ -1,17 +1,17 @@
 import logging
 import requests
 import os
-import google.generativeai as genai
-from pydantic import BaseModel
-from fastapi import HTTPException
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from google import genai
+from google.genai import types
 
-from fastapi.middleware.cors import CORSMiddleware
-from app.db import supabaseClient
 from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from app.db import supabaseClient
 from app.auth import getCurrentUserId
 from app.target_repository import saveTarget, listTargetsForOwner
 from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, extractReviews
@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="ReviewLens Coors edition (/^-^)o日日o(|^0^|) Backend Fastest API")
 
 if os.getenv("GEMINI_API_KEY"):
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 else:
     raise ValueError("GEMINI_API_KEY is not set")
-
+    
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -42,7 +42,6 @@ class QuestionRequest(BaseModel):
     question: str
 
 def saveReviews(rows: list) -> None:
-    # The connection to Supabase can be dropped while the slow review fetch runs, so try once more.
     for attempt in range(2):
         try:
             supabaseClient.table("reviews").upsert(rows, on_conflict="analysis_target_id,google_review_id").execute()
@@ -55,7 +54,6 @@ JOB_STATUS_TO_UI = {"pending": "in_progress", "running": "in_progress", "complet
 STALE_JOB_AFTER = timedelta(minutes=10)
 
 def withIngestionStatus(targets: list) -> list:
-    """Add the latest ingestion job's state to each target so the UI can display it."""
     if not targets:
         return targets
     ids = [t["id"] for t in targets]
@@ -69,7 +67,7 @@ def withIngestionStatus(targets: list) -> list:
     )
     latest = {}
     for job in jobs:
-        latest.setdefault(job["analysis_target_id"], job)  # newest job comes first
+        latest.setdefault(job["analysis_target_id"], job)
 
     for t in targets:
         job = latest.get(t["id"])
@@ -78,7 +76,6 @@ def withIngestionStatus(targets: list) -> list:
             state = JOB_STATUS_TO_UI.get(job["status"], "not_started")
             error = job.get("error_message")
             started = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
-            # A job that never finished (for example the server stopped midway) must not block a retry.
             if state == "in_progress" and datetime.now(timezone.utc) - started > STALE_JOB_AFTER:
                 state, error = "failed", "Ingestion did not finish. You can try again."
         t["ingestion_status"] = state
@@ -86,7 +83,6 @@ def withIngestionStatus(targets: list) -> list:
     return targets
 
 def isGoogleUrl(url: str) -> bool:
-    """True for an http(s) link whose host is google.com or one of its subdomains."""
     try:
         parsed = urlparse(url)
     except ValueError:
@@ -97,7 +93,6 @@ def isGoogleUrl(url: str) -> bool:
 def nowIso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-# Same shape FastAPI uses for its own 422s, so the frontend can show each message under its field.
 def fieldError(field: str, message: str) -> dict:
     return {"loc": ["body", field], "msg": message}
 
@@ -148,7 +143,6 @@ def getTargetReviews(
     offset: int = Query(0, ge=0),
 ):
     verifyTargetOwnership(targetId, userId)
-    # Newest first (reviews with no date last); id keeps the order stable between pages.
     query = (
         supabaseClient.table("reviews")
         .select("*")
@@ -156,7 +150,7 @@ def getTargetReviews(
         .order("reviewed_at", desc=True, nullsfirst=False)
         .order("id")
     )
-    if limit is not None:  # without a limit, every review is returned as before
+    if limit is not None:
         query = query.range(offset, offset + limit - 1)
     return query.execute().data
 
@@ -193,8 +187,6 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
     except ValueError as e:
         result = {"status": "failed", "error_message": str(e), "completed_at": nowIso()}
     except Exception as e:
-        # Don't pass the raw error on: requests errors include the URL, which contains the SerpAPI key.
-        # requests errors include the URL (and the SerpAPI key), so only log their type.
         detail = "" if isinstance(e, requests.RequestException) else e
         logger.warning("Ingestion failed for target %s: %s: %s", targetId, type(e).__name__, detail)
         result = {
@@ -210,24 +202,22 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
 
 @app.post("/api/targets/{targetId}/ask")
 def ask_review_question(targetId: str, request: QuestionRequest, userId: str = Depends(getCurrentUserId)):
-    # 1. Verify user ownership
     verifyTargetOwnership(targetId, userId)
     
-    # Fetch the targets from Supabase (S2-010)
+    print("1. Fetching reviews from Supabase...")
     res = supabaseClient.table("reviews").select("review_text").eq("analysis_target_id", targetId).execute()
     reviews_data = res.data
+    print(f"2. Successfully fetched {len(reviews_data)} reviews!")
 
     if not reviews_data:
         return {"answer": "No reviews have been ingested for this target at the moment. Please ingest data first before asking questions."}
 
-    # Formatting
     context_lines = [f"- {r.get('review_text')}" for r in reviews_data[:50] if r.get("review_text")]
     reviews_context = "\n".join(context_lines)
 
     if not reviews_context.strip():
          return {"answer": "The ingested reviews do not contain any text at the moment."}
 
-    # ReviewLens System Prompt default
     system_prompt = (
         "You are ReviewLens AI. Answer the user's question based strictly on the provided review evidence. "
         "If the reviews do not contain sufficient evidence to answer the question, clearly state that "
@@ -235,17 +225,29 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
         "If the user asks about a different product, entity, or general knowledge, politely decline to answer."
     )
 
-    # Initialize Gemini
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=system_prompt
-        )
-        
+        print("3. Sending direct REST request to Gemini (Bypassing SDK)...")
         prompt = f"Review Evidence:\n{reviews_context}\n\nUser Question: {request.question}"
-        response = model.generate_content(prompt)
         
-        return {"answer": response.text}
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={os.getenv('GEMINI_API_KEY')}"
+        
+        payload = {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"parts": [{"text": prompt}]}]
+        }
+        
+        response = requests.post(url, json=payload, timeout=15)
+        response.raise_for_status()
+        
+        answer_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        
+        print("4. Success! Returning answer to frontend.")
+        return {"answer": answer_text}
+        
+    except requests.exceptions.RequestException as e:
+        error_details = e.response.text if hasattr(e, 'response') and e.response else str(e)
+        print(f"FAILED AT STEP 3 (Network): {error_details}")
+        raise HTTPException(status_code=500, detail="Failed to connect to AI provider. Please try again.")
     except Exception as e:
-        logger.error("Gemini API Error: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to generate AI response. Please try again later.")
+        print(f"FAILED AT STEP 3 (Parsing): {e}")
+        raise HTTPException(status_code=500, detail="Failed to process AI response.")
