@@ -1,5 +1,9 @@
 import logging
 import requests
+import os
+import google.generativeai as genai
+from pydantic import BaseModel
+from fastapi import HTTPException
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -16,6 +20,11 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ReviewLens Coors edition (/^-^)o日日o(|^0^|) Backend Fastest API")
 
+if os.getenv("GEMINI_API_KEY"):
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+else:
+    raise ValueError("GEMINI_API_KEY is not set")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -28,6 +37,9 @@ class TargetCreateRequest(BaseModel):
     name: str
     platform: str
     sourceUrl: str
+
+class QuestionRequest(BaseModel):
+    question: str
 
 def saveReviews(rows: list) -> None:
     # The connection to Supabase can be dropped while the slow review fetch runs, so try once more.
@@ -195,3 +207,10 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
     if updatedJob["status"] == "failed":
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=updatedJob["error_message"])
     return updatedJob
+
+@app.post("/api/targets/{targetId}/ask")
+def ask_review_question(targetId: str, request: QuestionRequest, userId: str = Depends(getCurrentUserId)):
+    #Verify user ownership
+    verifyTargetOwnership(targetId, userId)
+    
+    return {"answer": f"Backend received question target:{targetId}: {request.question}"}
