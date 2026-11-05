@@ -210,7 +210,42 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
 
 @app.post("/api/targets/{targetId}/ask")
 def ask_review_question(targetId: str, request: QuestionRequest, userId: str = Depends(getCurrentUserId)):
-    #Verify user ownership
+    # 1. Verify user ownership
     verifyTargetOwnership(targetId, userId)
     
-    return {"answer": f"Backend received question target:{targetId}: {request.question}"}
+    # Fetch the targets from Supabase (S2-010)
+    res = supabaseClient.table("reviews").select("review_text").eq("analysis_target_id", targetId).execute()
+    reviews_data = res.data
+
+    if not reviews_data:
+        return {"answer": "No reviews have been ingested for this target at the moment. Please ingest data first before asking questions."}
+
+    # Formatting
+    context_lines = [f"- {r.get('review_text')}" for r in reviews_data[:50] if r.get("review_text")]
+    reviews_context = "\n".join(context_lines)
+
+    if not reviews_context.strip():
+         return {"answer": "The ingested reviews do not contain any text at the moment."}
+
+    # ReviewLens System Prompt default
+    system_prompt = (
+        "You are ReviewLens AI. Answer the user's question based strictly on the provided review evidence. "
+        "If the reviews do not contain sufficient evidence to answer the question, clearly state that "
+        "there is not enough information. Do not invent answers, guess, or use outside world knowledge. "
+        "If the user asks about a different product, entity, or general knowledge, politely decline to answer."
+    )
+
+    # Initialize Gemini
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=system_prompt
+        )
+        
+        prompt = f"Review Evidence:\n{reviews_context}\n\nUser Question: {request.question}"
+        response = model.generate_content(prompt)
+        
+        return {"answer": response.text}
+    except Exception as e:
+        logger.error("Gemini API Error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to generate AI response. Please try again later.")
