@@ -4,8 +4,6 @@ import os
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from google import genai
-from google.genai import types
 
 from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,11 +17,6 @@ from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ReviewLens Coors edition (/^-^)o日日o(|^0^|) Backend Fastest API")
-
-if os.getenv("GEMINI_API_KEY"):
-    gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-else:
-    raise ValueError("GEMINI_API_KEY is not set")
     
 app.add_middleware(
     CORSMiddleware,

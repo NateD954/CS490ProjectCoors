@@ -36,8 +36,12 @@ export default function ReviewQA({ targetId }: { targetId: string }) {
 
       const data = await response.json();
       setAnswer(data.answer);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(String(err));
+      }
     } finally {
       setLoading(false);
     }
