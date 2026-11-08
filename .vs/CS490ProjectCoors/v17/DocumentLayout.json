@@ -1,7 +1,16 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "C:\\Users\\nated\\OneDrive\\Documents\\GitHub\\CS490ProjectCoors\\",
+<<<<<<< Updated upstream
   "Documents": [],
+=======
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\nated\\OneDrive\\Documents\\GitHub\\CS490ProjectCoors\\Database\\Migrations\\001_analysis_targets_s1_014.sql||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:Database\\Migrations\\001_analysis_targets_s1_014.sql||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    }
+  ],
+>>>>>>> Stashed changes
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -14,6 +23,22 @@
             {
               "$type": "Bookmark",
               "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+<<<<<<< Updated upstream
+=======
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "001_analysis_targets_s1_014.sql",
+              "DocumentMoniker": "C:\\Users\\nated\\OneDrive\\Documents\\GitHub\\CS490ProjectCoors\\Database\\Migrations\\001_analysis_targets_s1_014.sql",
+              "RelativeDocumentMoniker": "Database\\Migrations\\001_analysis_targets_s1_014.sql",
+              "ToolTip": "C:\\Users\\nated\\OneDrive\\Documents\\GitHub\\CS490ProjectCoors\\Database\\Migrations\\001_analysis_targets_s1_014.sql",
+              "RelativeToolTip": "Database\\Migrations\\001_analysis_targets_s1_014.sql",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-11-08T22:58:19.737Z",
+              "EditorCaption": ""
+>>>>>>> Stashed changes
             }
           ]
         }
