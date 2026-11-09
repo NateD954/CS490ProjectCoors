@@ -1,0 +1,5 @@
+[run]
+source = app,services
+omit =
+    */tests/*
+    */__init__.py

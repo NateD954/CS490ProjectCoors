@@ -1,9 +1,12 @@
 {
   "ExpandedNodes": [
     "",
+    "\\.github",
+    "\\.github\\workflows",
     "\\Back_End",
     "\\Back_End\\services",
     "\\Back_End\\tests",
+<<<<<<< Updated upstream
     "\\Front_End",
     "\\Front_End\\clerk-nextjs",
     "\\Front_End\\clerk-nextjs\\components",
@@ -12,5 +15,12 @@
     "\\Front_End\\clerk-nextjs\\tests"
   ],
   "SelectedNode": "\\Front_End\\clerk-nextjs\\app\\api\\backend\\[...path]\\route.ts",
+=======
+    "\\Documents",
+    "\\Front_End",
+    "\\Front_End\\clerk-nextjs"
+  ],
+  "SelectedNode": "\\Database",
+>>>>>>> Stashed changes
   "PreviewInSolutionExplorer": false
 }

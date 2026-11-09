@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
 import { TargetWorkspace } from "@/components/TargetWorkspace";
 import { Spinner } from "@/components/ui/Spinner";
-import ReviewQA from "@/components/Q&A";
+import ReviewQA from "@/components/ReviewQA";
 
 // Reading `params` is request-time data, so Next.js wants it inside <Suspense>.
 async function WorkspaceLoader({ params }: { params: Promise<{ id: string }> }) {

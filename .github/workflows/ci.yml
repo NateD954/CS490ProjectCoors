@@ -17,6 +17,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Minimum percentage of changed lines that must be covered by tests.
+  # See docs/COVERAGE.md for the policy.
+  CHANGED_CODE_THRESHOLD: 80
+
 jobs:
   backend-tests:
     name: Backend tests (pytest)
@@ -33,7 +38,10 @@ jobs:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
       OPENWEBNINJA_API_KEY: placeholder
     steps:
+      # Full history is needed so the coverage gate can compare against main.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -44,8 +52,15 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Run tests
-        run: python -m pytest -q
+      - name: Run tests with coverage
+        run: python -m pytest -q --cov --cov-report=xml
+
+      - name: Changed-code coverage gate
+        if: github.event_name == 'pull_request'
+        run: >
+          diff-cover coverage.xml
+          --compare-branch=origin/${{ github.base_ref }}
+          --fail-under=${{ env.CHANGED_CODE_THRESHOLD }}
 
   frontend-checks:
     name: Frontend checks (lint, test and build)
@@ -59,6 +74,8 @@ jobs:
       BACKEND_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -72,8 +89,15 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm test
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Changed-code coverage gate
+        if: github.event_name == 'pull_request'
+        run: >
+          pipx run diff-cover coverage/cobertura-coverage.xml
+          --compare-branch=origin/${{ github.base_ref }}
+          --fail-under=${{ env.CHANGED_CODE_THRESHOLD }}
 
       # next build also runs the TypeScript type check
       - name: Build
