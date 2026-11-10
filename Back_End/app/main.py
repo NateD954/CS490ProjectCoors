@@ -249,19 +249,3 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
     except (KeyError, IndexError, TypeError, ValueError) as e:
         logger.warning("Unexpected AI provider response: %s", type(e).__name__)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to process AI response.")
-
-# Demo only: deliberately untested, to show the changed-code coverage gate failing.
-def summarizeRatings(reviews):
-    if not reviews:
-        return {"count": 0, "average": None, "label": "No reviews"}
-
-    average = round(sum(r["rating"] for r in reviews) / len(reviews), 1)
-
-    if average >= 4:
-        label = "Positive"
-    elif average >= 3:
-        label = "Mixed"
-    else:
-        label = "Negative"
-
-    return {"count": len(reviews), "average": average, "label": label}

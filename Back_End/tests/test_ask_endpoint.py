@@ -235,3 +235,14 @@ def test_unexpected_provider_response_gives_a_safe_error_message(client, monkeyp
 
     assert err.value.status_code in (500, 502)
     assert err.value.detail == "Failed to process AI response."
+
+def test_missing_api_key_gives_a_clear_error_and_does_not_call_the_provider(client, monkeypatch):
+    addReviews(client, "Great tacos")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    calls = providerReturns(monkeypatch, FakeProviderResponse(answerPayload("never sent")))
+
+    with pytest.raises(main.HTTPException) as err:
+        ask()
+
+    assert err.value.status_code == 503
+    assert calls == []
