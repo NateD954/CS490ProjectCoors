@@ -57,7 +57,7 @@ def client(monkeypatch):
     """One target owned by user_A. Its reviews are added by each test."""
     fake = FakeClient()
     fake.tables["analysis_targets"].append(
-        {"id": "target-A", "owner_clerk_id": "user_A", "business_name": "A's Cafe", "source_url": URL}
+        {"id": "target-A", "owner_clerk_id": "user_A", "business_name": "A's Cafe", "platform": "GOOGLE_MAPS", "source_url": URL}
     )
     monkeypatch.setattr(main, "supabaseClient", fake)
     monkeypatch.setenv("GEMINI_API_KEY", API_KEY)
@@ -170,6 +170,27 @@ def test_only_the_first_50_reviews_are_sent(client, monkeypatch):
     assert "text-49" in prompt
     assert "text-50" not in prompt
 
+
+# ---- system prompt ------------------------------------------------------------
+
+def test_system_prompt(client, monkeypatch):
+    addReviews(client, "Great tacos")
+
+    calls = providerReturns(
+        monkeypatch,
+        FakeProviderResponse(answerPayload("ok"))
+    )
+
+    ask()
+
+    prompt = calls[0]["json"]["systemInstruction"]["parts"][0]["text"]
+
+    assert "A's Cafe" in prompt
+    assert "GOOGLE_MAPS" in prompt
+    assert "review evidence" in prompt
+    assert "general-knowledge" in prompt
+    assert "other businesses" in prompt
+    assert "review platforms" in prompt
 
 # ---- provider failures -------------------------------------------------------
 
