@@ -200,7 +200,7 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
 
 @app.post("/api/targets/{targetId}/ask")
 def ask_review_question(targetId: str, request: QuestionRequest, userId: str = Depends(getCurrentUserId)):
-    verifyTargetOwnership(targetId, userId)
+    target = verifyTargetOwnership(targetId, userId)
 
     res = supabaseClient.table("reviews").select("review_text").eq("analysis_target_id", targetId).execute()
     reviews_data = res.data
@@ -215,10 +215,16 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
          return {"answer": "The ingested reviews do not contain any text at the moment."}
 
     system_prompt = (
-        "You are ReviewLens AI. Answer the user's question based strictly on the provided review evidence. "
-        "If the reviews do not contain sufficient evidence to answer the question, clearly state that "
-        "there is not enough information. Do not invent answers, guess, or use outside world knowledge. "
-        "If the user asks about a different product, entity, or general knowledge, politely decline to answer."
+        f"You are ReviewLens AI, analyzing {target['business_name']} "
+        f"using reviews from {target['platform']}. "
+        "Answer questions using only the provided review evidence. "
+        "Never invent information, guess, or use outside knowledge. "
+        "If the reviews lack sufficient evidence, clearly explain that limitation. "
+        "Decline unrelated general-knowledge questions, questions about other "
+        "businesses, products, or locations, and questions about review platforms "
+        "not represented in the active dataset. "
+        "When declining, briefly explain that ReviewLens only analyzes "
+        "the active business's provided reviews."
     )
 
     apiKey = os.getenv("GEMINI_API_KEY")
