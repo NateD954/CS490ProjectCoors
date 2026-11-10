@@ -81,7 +81,7 @@ describe("Home page", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByText("targets: ")).toBeTruthy();
+    expect(await screen.findByText(/targets:/)).toBeTruthy();
     expect(screen.getByText("Create a new target")).toBeTruthy();
     expect(screen.getByText("Your targets")).toBeTruthy();
   });
