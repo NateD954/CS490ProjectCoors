@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.db import supabaseClient
 from app.auth import getCurrentUserId
@@ -31,8 +31,13 @@ class TargetCreateRequest(BaseModel):
     platform: str
     sourceUrl: str
 
+MAX_QUESTION_LENGTH = 1000  # keep in step with the limit in the frontend's ReviewQA component
+
 class QuestionRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
+
+# The key is sent in a header, never in the URL, so it cannot end up in logs or error text.
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
 
 def saveReviews(rows: list) -> None:
     for attempt in range(2):
@@ -116,7 +121,7 @@ def createTarget(body: TargetCreateRequest, userId: str = Depends(getCurrentUser
     if body.platform != "GOOGLE_MAPS":
         errors.append(fieldError("platform", "Unsupported review platform."))
     if errors:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=errors)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=errors)
 
     return saveTarget(supabaseClient, userId, dataId, name, sourceUrl)
 
@@ -196,11 +201,9 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
 @app.post("/api/targets/{targetId}/ask")
 def ask_review_question(targetId: str, request: QuestionRequest, userId: str = Depends(getCurrentUserId)):
     verifyTargetOwnership(targetId, userId)
-    
-    print("1. Fetching reviews from Supabase...")
+
     res = supabaseClient.table("reviews").select("review_text").eq("analysis_target_id", targetId).execute()
     reviews_data = res.data
-    print(f"2. Successfully fetched {len(reviews_data)} reviews!")
 
     if not reviews_data:
         return {"answer": "No reviews have been ingested for this target at the moment. Please ingest data first before asking questions."}
@@ -218,29 +221,25 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
         "If the user asks about a different product, entity, or general knowledge, politely decline to answer."
     )
 
+    apiKey = os.getenv("GEMINI_API_KEY")
+    if not apiKey:
+        logger.error("GEMINI_API_KEY is not set")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The AI assistant is not available right now.")
+
+    prompt = f"Review Evidence:\n{reviews_context}\n\nUser Question: {request.question}"
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+
     try:
-        print("3. Sending direct REST request to Gemini (Bypassing SDK)...")
-        prompt = f"Review Evidence:\n{reviews_context}\n\nUser Question: {request.question}"
-        
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={os.getenv('GEMINI_API_KEY')}"
-        
-        payload = {
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"parts": [{"text": prompt}]}]
-        }
-        
-        response = requests.post(url, json=payload, timeout=15)
+        response = requests.post(GEMINI_URL, headers={"x-goog-api-key": apiKey}, json=payload, timeout=15)
         response.raise_for_status()
-        
-        answer_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        
-        print("4. Success! Returning answer to frontend.")
-        return {"answer": answer_text}
-        
-    except requests.exceptions.RequestException as e:
-        error_details = e.response.text if hasattr(e, 'response') and e.response else str(e)
-        print(f"FAILED AT STEP 3 (Network): {error_details}")
-        raise HTTPException(status_code=500, detail="Failed to connect to AI provider. Please try again.")
-    except Exception as e:
-        print(f"FAILED AT STEP 3 (Parsing): {e}")
-        raise HTTPException(status_code=500, detail="Failed to process AI response.")
+        return {"answer": response.json()["candidates"][0]["content"]["parts"][0]["text"]}
+    except requests.RequestException as e:
+        # Log only the error type: the text of these errors can include request details.
+        logger.warning("AI provider request failed: %s", type(e).__name__)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to connect to AI provider. Please try again.")
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        logger.warning("Unexpected AI provider response: %s", type(e).__name__)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to process AI response.")
