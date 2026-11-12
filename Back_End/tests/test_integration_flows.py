@@ -7,12 +7,13 @@ Q&A code all run together. Only three things are replaced:
 
   * the login check (a request is treated as coming from the chosen user),
   * the database (an in-memory stand-in that behaves like Supabase for the calls
-    this app makes: inserts, upserts, filters, ordering and paging),
+    this app makes: inserts, upserts, filters, ordering, paging and aggregation),
   * the two outside services (the review provider and the AI provider), which are
     faked at the point where the HTTP request would leave the app.
 """
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 import requests
@@ -127,6 +128,19 @@ class FakeDatabase:
     def table(self, name):
         self.accessed.append(name)
         return FakeQuery(self, name)
+
+    def rpc(self, name, params):
+        assert name == "get_target_review_summary"
+        self.accessed.append(name)
+        ratings = [
+            row["rating"] for row in self.tables["reviews"]
+            if row["analysis_target_id"] == params["target_id"]
+        ]
+        summary = {
+            "review_count": len(ratings),
+            "average_rating": sum(ratings) / len(ratings) if ratings else None,
+        }
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data=[summary]))
 
     def stamp(self):
         self.ticks += 1
@@ -281,6 +295,10 @@ def test_ingested_reviews_are_stored_and_loaded_newest_first(api, db, provider):
     assert job.status_code == 200
     assert job.json()["status"] == "completed"
     assert job.json()["reviews_ingested"] == 3  # the invalid rating and the empty text were skipped
+    assert job.json()["reviews_skipped"] == 2
+    loaded = api.target(target["id"]).json()
+    assert loaded["ingestion_status"] == "partial"
+    assert loaded["ingestion_skipped"] == 2
     # Newest first, with the undated review last.
     assert reviewIds(api.reviews(target["id"])) == ["r2", "r1", "r3"]
     assert {r["analysis_target_id"] for r in db.tables["reviews"]} == {target["id"]}
@@ -300,7 +318,7 @@ def test_paging_through_stored_reviews_is_consistent(api, db, provider):
 
 
 def test_ingestion_status_is_reported_with_the_target(api, db, provider):
-    provider.byPlace[CAFE_ID] = CAFE_REVIEWS
+    provider.byPlace[CAFE_ID] = CAFE_REVIEWS[:3]
     api.asUser("user_A")
     target = api.create("Cafe", CAFE_ID)
     assert api.target(target["id"]).json()["ingestion_status"] == "not_started"
@@ -309,7 +327,82 @@ def test_ingestion_status_is_reported_with_the_target(api, db, provider):
 
     loaded = api.target(target["id"]).json()
     assert loaded["ingestion_status"] == "completed"
+    assert loaded["ingestion_skipped"] == 0
     assert loaded["business_name"] == "Cafe"
+
+
+def test_review_summary_uses_the_stored_ratings(api, db, provider):
+    provider.byPlace[CAFE_ID] = CAFE_REVIEWS
+    targetId = api.asUser("user_A").create("Cafe", CAFE_ID)["id"]
+
+    assert api.target(targetId).json()["review_summary"] == {"review_count": 0, "average_rating": None}
+    assert api.ingest(targetId).status_code == 200
+    assert api.target(targetId).json()["review_summary"] == {"review_count": 3, "average_rating": 4}
+
+
+def test_summary_and_gemini_context_follow_changes_to_the_stored_reviews(api, db, provider, ai):
+    provider.byPlace[CAFE_ID] = CAFE_REVIEWS
+    targetId = api.asUser("user_A").create("Cafe", CAFE_ID)["id"]
+    assert api.ingest(targetId).status_code == 200
+    assert api.target(targetId).json()["review_summary"] == {"review_count": 3, "average_rating": 4}
+
+    db.table("reviews").insert({
+        "analysis_target_id": targetId,
+        "google_review_id": "added-after-ingestion",
+        "rating": 1,
+        "review_text": "A newly saved review mentions the wait time",
+    }).execute()
+
+    assert api.target(targetId).json()["review_summary"] == {"review_count": 4, "average_rating": 3.25}
+    assert api.ask(targetId).status_code == 200
+    assert "A newly saved review mentions the wait time" in ai.prompt()
+    assert "Cafe pastries are fresh" in ai.prompt()
+
+    db.tables["reviews"][:] = [row for row in db.tables["reviews"] if row["google_review_id"] != "r1"]
+
+    assert api.target(targetId).json()["review_summary"] == {"review_count": 3, "average_rating": 3}
+    assert api.ask(targetId).status_code == 200
+    assert "Cafe pastries are fresh" not in ai.prompt()
+    assert provider.calls == [CAFE_ID]
+    assert len(ai.calls) == 2
+
+
+def test_malformed_and_duplicate_source_records_do_not_block_the_batch(api, db, provider):
+    provider.byPlace[CAFE_ID] = [
+        raw("r1", 4, "Kept review", "2026-10-01 10:00:00"),
+        raw("r1", 1, "Duplicate review", None),
+        None,
+        raw("blank", 5, "   ", None),
+        raw("boolean", True, "Wrong rating type", None),
+        raw("bad-date", 5, "Wrong date format", "not a date"),
+        raw(25, 5, "Wrong ID type", None),
+    ]
+    targetId = api.asUser("user_A").create("Cafe", CAFE_ID)["id"]
+
+    result = api.ingest(targetId)
+
+    assert result.status_code == 200
+    assert result.json()["reviews_ingested"] == 1
+    assert result.json()["reviews_skipped"] == 6
+    assert reviewIds(api.reviews(targetId)) == ["r1"]
+    assert api.target(targetId).json()["review_summary"] == {"review_count": 1, "average_rating": 4}
+
+
+@pytest.mark.parametrize(
+    ("source", "httpStatus", "ingestionStatus"),
+    [([], 200, "completed"), ([None], 502, "failed")],
+)
+def test_empty_source_and_all_rejected_source_have_distinct_results(api, db, provider, source, httpStatus, ingestionStatus):
+    provider.byPlace[CAFE_ID] = source
+    targetId = api.asUser("user_A").create("Cafe", CAFE_ID)["id"]
+
+    result = api.ingest(targetId)
+
+    assert result.status_code == httpStatus
+    loaded = api.target(targetId).json()
+    assert loaded["ingestion_status"] == ingestionStatus
+    assert loaded["ingestion_skipped"] == len(source)
+    assert loaded["review_summary"] == {"review_count": 0, "average_rating": None}
 
 
 def test_reingesting_updates_reviews_in_place_without_duplicates(api, db, provider, ai):
@@ -348,11 +441,13 @@ def test_a_failed_ingestion_keeps_existing_reviews_and_reports_the_failure(api, 
     loaded = api.target(target["id"]).json()
     assert loaded["ingestion_status"] == "failed"
     assert loaded["ingestion_error"] == "Could not fetch reviews from the review provider. Please try again."
+    assert loaded["ingestion_skipped"] is None
+    assert loaded["review_summary"] == {"review_count": 3, "average_rating": 4}
     assert reviewIds(api.reviews(target["id"])) == ["r2", "r1", "r3"]  # nothing was lost
 
     provider.error = None
     assert api.ingest(target["id"]).status_code == 200
-    assert api.target(target["id"]).json()["ingestion_status"] == "completed"
+    assert api.target(target["id"]).json()["ingestion_status"] == "partial"
 
 
 # ---- 4. applying authenticated ownership before review retrieval --------------
@@ -380,6 +475,7 @@ def test_another_user_is_denied_before_any_review_is_read(api, db, provider, ai)
         assert "Cafe espresso is great" not in response.text
     assert "reviews" not in db.accessed  # the ownership check ran before any review lookup
     assert "ingestion_jobs" not in db.accessed  # and before any job was created
+    assert "get_target_review_summary" not in db.accessed
     assert len(db.tables["ingestion_jobs"]) == 1  # only user_A's job exists
     assert ai.calls == []  # the AI provider never saw user_A's reviews
     assert len(provider.calls) == providerCallsBefore  # and the review provider was not called again
@@ -455,10 +551,12 @@ def test_switching_between_targets_returns_each_targets_own_data(api, db, provid
     assert reviewIds(api.reviews(cafe["id"])) == ["r2", "r1", "r3"]
     assert reviewIds(api.reviews(bakery["id"])) == ["b1"]
 
+    assert api.target(bakery["id"]).json()["review_summary"] == {"review_count": 1, "average_rating": 5}
     api.ask(bakery["id"])
     assert "Bakery sourdough is wonderful" in ai.prompt()
     assert "Cafe espresso is great" not in ai.prompt()
 
+    assert api.target(cafe["id"]).json()["review_summary"] == {"review_count": 3, "average_rating": 4}
     api.ask(cafe["id"])  # switching back must not carry anything over from the bakery
     assert "Cafe espresso is great" in ai.prompt()
     assert "Bakery sourdough is wonderful" not in ai.prompt()
@@ -479,8 +577,12 @@ def test_each_users_targets_stay_separate_when_both_use_the_app(api, db, provide
     api.asUser("user_A")
     assert [t["business_name"] for t in api.client.get("/api/targets").json()] == ["Cafe"]
     assert reviewIds(api.reviews(cafe["id"])) == ["r2", "r1", "r3"]
+    forbidden = api.target(bakery["id"])
+    assert forbidden.status_code == 403
+    assert "review_summary" not in forbidden.json()
 
     api.asUser("user_B")
     assert [t["business_name"] for t in api.client.get("/api/targets").json()] == ["Bakery"]
     assert reviewIds(api.reviews(bakery["id"])) == ["b1"]
+    assert api.target(bakery["id"]).json()["review_summary"] == {"review_count": 1, "average_rating": 5}
     assert api.reviews(cafe["id"]).status_code in (403, 404)

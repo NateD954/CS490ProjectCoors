@@ -17,9 +17,12 @@ vi.mock("@/components/TargetWorkspace", async () => {
   };
 });
 vi.mock("@/components/ReviewQA", async () => {
-  const { createElement } = await import("react");
+  const { createElement, useState } = await import("react");
   return {
-    default: ({ targetId }: { targetId: string }) => createElement("div", null, `qa for ${targetId}`),
+    default: function MockReviewQA({ targetId }: { targetId: string }) {
+      const [mountedTargetId] = useState(targetId);
+      return createElement("div", null, `qa for ${mountedTargetId}`);
+    },
   };
 });
 
@@ -64,15 +67,18 @@ function suspenseIn(page: ReactNode) {
   return suspense as ReactElement<{ fallback: ReactNode; children: ReactNode }>;
 }
 
-async function renderLoaded(id: string) {
+async function loadWorkspace(id: string) {
   const suspense = suspenseIn(pageFor(id));
   const [loader] = collect(
     suspense.props.children,
     (element) => typeof element.type === "function" && element.type.constructor.name === "AsyncFunction"
   );
   expect(loader).toBeDefined();
-  const loaded = await (loader.type as (props: unknown) => Promise<ReactNode>)(loader.props);
-  return render(<>{loaded}</>);
+  return await (loader.type as (props: unknown) => Promise<ReactNode>)(loader.props);
+}
+
+async function renderLoaded(id: string) {
+  return render(<>{await loadWorkspace(id)}</>);
 }
 
 // ---- tests -------------------------------------------------------------------
@@ -102,10 +108,19 @@ describe("Target page", () => {
   it("gives every part of the page that needs a target the same id", async () => {
     await renderLoaded("t9");
 
-    // If the question box is on this page, it must be asking about the same target.
-    const questionBoxes = screen.queryAllByText(/^qa for /);
-    questionBoxes.forEach((box) => expect(box.textContent).toBe("qa for t9"));
+    expect(screen.getByText("qa for t9")).toBeTruthy();
     expect(screen.getByText("workspace for t9")).toBeTruthy();
+  });
+
+  it("resets the workspace and question box when the active target changes", async () => {
+    const { rerender } = await renderLoaded("t1");
+    expect(screen.getByText("qa for t1")).toBeTruthy();
+
+    rerender(<>{await loadWorkspace("t2")}</>);
+
+    expect(screen.getByText("workspace for t2")).toBeTruthy();
+    expect(screen.getByText("qa for t2")).toBeTruthy();
+    expect(screen.queryByText("qa for t1")).toBeNull();
   });
 
   it("is wrapped so that notifications work anywhere on the page", () => {

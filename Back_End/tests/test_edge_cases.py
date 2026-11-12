@@ -279,6 +279,7 @@ def test_an_old_finished_job_is_not_treated_as_stuck(db):
     target = statusFor(db, {"status": "completed", "created_at": minutesAgo(120)})
 
     assert target["ingestion_status"] == "completed"
+    assert target["ingestion_skipped"] is None
 
 
 def test_a_failed_job_keeps_its_error_message(db):

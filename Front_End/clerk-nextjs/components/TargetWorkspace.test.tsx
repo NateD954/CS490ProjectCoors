@@ -70,6 +70,33 @@ describe("TargetWorkspace: loading the target", () => {
     expect(getTargetMock).toHaveBeenCalledWith("t1");
   });
 
+  it("replaces the placeholder with the persisted ingestion summary", async () => {
+    getTargetMock.mockResolvedValue(target({
+      ingestionStatus: "partial",
+      skippedReviews: 2,
+      reviewSummary: { count: 3, averageRating: 4 },
+    }));
+
+    render(<TargetWorkspace id="t1" />);
+
+    expect(await screen.findByRole("heading", { name: "Ingestion summary" })).toBeTruthy();
+    expect(screen.getByText("Stored reviews").nextElementSibling?.textContent).toBe("3");
+    expect(screen.getByText("Average rating").nextElementSibling?.textContent).toBe("4.00 / 5");
+    expect(screen.getByText("Completed with skips")).toBeTruthy();
+    expect(screen.getByText("Skipped in latest run").nextElementSibling?.textContent).toBe("2");
+    expect(screen.queryByText(/will appear here in a later sprint/)).toBeNull();
+  });
+
+  it("shows zero stored reviews and no rating for an empty dataset", async () => {
+    getTargetMock.mockResolvedValue(target({ reviewSummary: { count: 0, averageRating: null } }));
+
+    render(<TargetWorkspace id="t1" />);
+
+    expect(await screen.findByText("No ratings yet")).toBeTruthy();
+    expect(screen.getByText("Stored reviews").nextElementSibling?.textContent).toBe("0");
+    expect(screen.getByText("Skipped in latest run").nextElementSibling?.textContent).toBe("Not recorded");
+  });
+
   it("says the target was not found when the backend returns nothing", async () => {
     getTargetMock.mockResolvedValue(null);
 
@@ -111,30 +138,39 @@ describe("TargetWorkspace: ingestion", () => {
   });
 
   it("starts ingestion, shows the new state and reports success", async () => {
-    getTargetMock.mockResolvedValue(target());
-    startIngestionMock.mockResolvedValue(target({ ingestionStatus: "completed" }));
+    getTargetMock.mockResolvedValue(target({ reviewSummary: { count: 0, averageRating: null } }));
+    startIngestionMock.mockResolvedValue(target({
+      ingestionStatus: "completed",
+      skippedReviews: 0,
+      reviewSummary: { count: 3, averageRating: 4 },
+    }));
 
     render(<TargetWorkspace id="t1" />);
     fireEvent.click(await screen.findByRole("button", { name: "Start ingestion" }));
 
     expect(await screen.findByRole("button", { name: "Run ingestion again" })).toBeTruthy();
     expect(startIngestionMock).toHaveBeenCalledWith("t1");
-    expect(toast.success).toHaveBeenCalledWith("Ingestion started. This page updates when it finishes.");
+    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.getByText("Stored reviews").nextElementSibling?.textContent).toBe("3");
+    expect(screen.getByText("Average rating").nextElementSibling?.textContent).toBe("4.00 / 5");
+    expect(toast.success).toHaveBeenCalledWith("Ingestion finished.");
     expect(toast.dismiss).toHaveBeenCalledWith("toast-1");
   });
 
-  it("shows the error message when starting ingestion fails", async () => {
-    getTargetMock.mockResolvedValue(target());
-    startIngestionMock.mockRejectedValue(
-      new Error("Could not fetch reviews from the review provider. Please try again.")
-    );
+  it("refreshes the persisted job state after ingestion fails", async () => {
+    const failure = "Could not fetch reviews from the review provider. Please try again.";
+    getTargetMock
+      .mockResolvedValueOnce(target())
+      .mockResolvedValueOnce(target({ ingestionStatus: "failed", ingestionMessage: failure }));
+    startIngestionMock.mockRejectedValue(new Error(failure));
 
     render(<TargetWorkspace id="t1" />);
     fireEvent.click(await screen.findByRole("button", { name: "Start ingestion" }));
 
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith("Could not fetch reviews from the review provider. Please try again.")
-    );
+    expect(await screen.findByText("Failed")).toBeTruthy();
+    expect(screen.getByText(failure)).toBeTruthy();
+    expect(getTargetMock).toHaveBeenCalledTimes(2);
+    expect(toast.error).toHaveBeenCalledWith(failure);
     expect(toast.success).not.toHaveBeenCalled();
   });
 

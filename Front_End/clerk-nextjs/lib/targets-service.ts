@@ -1,16 +1,7 @@
 // ---------------------------------------------------------------------------
 // SERVICE BOUNDARY for AnalysisTarget, connected to the FastAPI backend
 // (Back_End/app/main.py) through the pass-through route at
-// app/api/backend/[...path]/route.ts. Components only call the four exported
-// functions, so they don't know or care how the data is fetched.
-//
-// Backend endpoints used today:
-//   POST /api/targets                 create (works as soon as the DB columns line up)
-//   GET  /api/targets/{id}            fetch one (owner only)
-//   GET  /api/targets/{id}/reviews    used to tell whether ingestion has produced data
-// Also used (the UI copes if an older backend lacks them):
-//   GET  /api/targets                 list the signed-in user's targets
-//   POST /api/targets/{id}/ingest     run the scraper for a target
+// app/api/backend/[...path]/route.ts.
 // ---------------------------------------------------------------------------
 import { PLATFORM_LABELS, TEAM_PLATFORM } from "./config";
 import type { AnalysisTarget, IngestionStatus, NewTargetInput, Review } from "./types";
@@ -87,6 +78,8 @@ type TargetRow = {
   created_at?: string;
   ingestion_status?: IngestionStatus; // latest ingestion job, added by the backend
   ingestion_error?: string | null;
+  ingestion_skipped?: number | null;
+  review_summary?: { review_count: number; average_rating: number | null };
 };
 
 function toTarget(row: TargetRow): AnalysisTarget {
@@ -96,10 +89,13 @@ function toTarget(row: TargetRow): AnalysisTarget {
     platform: PLATFORM_LABELS[row.platform ?? ""] ?? row.platform ?? TEAM_PLATFORM.label,
     sourceUrl: row.source_url ?? "",
     createdAt: row.created_at ?? new Date().toISOString(),
-    // The backend reports the latest ingestion job's state. If an older backend
-    // doesn't, getTarget() falls back to inferring it from stored reviews.
     ingestionStatus: row.ingestion_status ?? "not_started",
     ingestionMessage: row.ingestion_error ?? undefined,
+    skippedReviews: row.ingestion_skipped ?? undefined,
+    reviewSummary: row.review_summary && {
+      count: row.review_summary.review_count,
+      averageRating: row.review_summary.average_rating,
+    },
   };
 }
 
@@ -128,22 +124,12 @@ function remember(id: string) {
 // ----- Public API used by the UI -------------------------------------------
 
 export async function getTarget(id: string): Promise<AnalysisTarget | null> {
-  let row: TargetRow;
   try {
-    row = await request<TargetRow>(`/targets/${encodeURIComponent(id)}`);
+    return toTarget(await request<TargetRow>(`/targets/${encodeURIComponent(id)}`));
   } catch (err) {
     if (err instanceof ApiError && (err.status === 404 || err.status === 403)) return null;
     throw err;
   }
-  const target = toTarget(row);
-  if (row.ingestion_status !== undefined) return target; // the backend reported the state
-  try {
-    const reviews = await request<unknown[]>(`/targets/${encodeURIComponent(id)}/reviews`);
-    if (Array.isArray(reviews) && reviews.length > 0) target.ingestionStatus = "completed";
-  } catch {
-    // Reviews unavailable: leave the status as "not started".
-  }
-  return target;
 }
 
 export async function listTargets(): Promise<AnalysisTarget[]> {

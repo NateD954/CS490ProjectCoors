@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 
 from app.db import supabaseClient
 from app.auth import getCurrentUserId
-from app.target_repository import saveTarget, listTargetsForOwner
-from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, extractReviews
+from app.target_repository import getReviewSummary, saveTarget, listTargetsForOwner
+from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, parseReviews
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,10 @@ MAX_QUESTION_LENGTH = 1000  # keep in step with the limit in the frontend's Revi
 class QuestionRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
 
+
+class IngestionInputError(ValueError):
+    """An ingestion failure with a message safe to show to the user."""
+
 # The key is sent in a header, never in the URL, so it cannot end up in logs or error text.
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
 
@@ -57,7 +61,7 @@ def withIngestionStatus(targets: list) -> list:
     ids = [t["id"] for t in targets]
     jobs = (
         supabaseClient.table("ingestion_jobs")
-        .select("analysis_target_id,status,error_message,created_at")
+        .select("analysis_target_id,status,error_message,created_at,reviews_skipped")
         .in_("analysis_target_id", ids)
         .order("created_at", desc=True)
         .execute()
@@ -69,15 +73,20 @@ def withIngestionStatus(targets: list) -> list:
 
     for t in targets:
         job = latest.get(t["id"])
-        state, error = "not_started", None
+        state, error, skipped = "not_started", None, None
         if job:
             state = JOB_STATUS_TO_UI.get(job["status"], "not_started")
             error = job.get("error_message")
-            started = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
-            if state == "in_progress" and datetime.now(timezone.utc) - started > STALE_JOB_AFTER:
-                state, error = "failed", "Ingestion did not finish. You can try again."
+            skipped = job.get("reviews_skipped")
+            if state == "completed" and skipped:
+                state = "partial"
+            elif state == "in_progress":
+                started = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
+                if datetime.now(timezone.utc) - started > STALE_JOB_AFTER:
+                    state, error = "failed", "Ingestion did not finish. You can try again."
         t["ingestion_status"] = state
         t["ingestion_error"] = error
+        t["ingestion_skipped"] = skipped
     return targets
 
 def isGoogleUrl(url: str) -> bool:
@@ -131,7 +140,9 @@ def listTargets(userId: str = Depends(getCurrentUserId)):
 
 @app.get("/api/targets/{targetId}")
 def getTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
-    return withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
+    target = withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
+    target["review_summary"] = getReviewSummary(supabaseClient, targetId)
+    return target
 
 @app.get("/api/targets/{targetId}/reviews")
 def getTargetReviews(
@@ -162,12 +173,15 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
         "started_at": nowIso()
     }).execute().data[0]
 
+    skipped = None
     try:
         dataId = getGoogleDataIdFromURL(target["source_url"])
         if not dataId:
-            raise ValueError("The target's source URL does not contain a Google Maps place id.")
+            raise IngestionInputError("The target's source URL does not contain a Google Maps place id.")
 
-        reviews = extractReviews(getGooglePlaceData(dataId))
+        reviews, skipped = parseReviews(getGooglePlaceData(dataId))
+        if not reviews and skipped:
+            raise IngestionInputError("The review provider returned no usable reviews.")
         rows = [
             {
                 "analysis_target_id": targetId,
@@ -181,18 +195,18 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
         if rows:
             saveReviews(rows)
 
-        result = {"status": "completed", "reviews_ingested": len(rows), "completed_at": nowIso()}
-    except ValueError as e:
-        result = {"status": "failed", "error_message": str(e), "completed_at": nowIso()}
+        result = {"status": "completed", "reviews_ingested": len(rows)}
+    except IngestionInputError as e:
+        result = {"status": "failed", "error_message": str(e)}
     except Exception as e:
         detail = "" if isinstance(e, requests.RequestException) else e
         logger.warning("Ingestion failed for target %s: %s: %s", targetId, type(e).__name__, detail)
         result = {
             "status": "failed",
             "error_message": "Could not fetch reviews from the review provider. Please try again.",
-            "completed_at": nowIso()
         }
 
+    result.update(reviews_skipped=skipped, completed_at=nowIso())
     updatedJob = supabaseClient.table("ingestion_jobs").update(result).eq("id", job["id"]).execute().data[0]
     if updatedJob["status"] == "failed":
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=updatedJob["error_message"])
