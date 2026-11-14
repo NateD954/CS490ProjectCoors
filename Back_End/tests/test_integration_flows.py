@@ -25,6 +25,9 @@ from services import google_reviews
 CAFE_ID = "0x1111111111111111:0xaaaaaaaaaaaaaaaa"
 BAKERY_ID = "0x2222222222222222:0xbbbbbbbbbbbbbbbb"
 
+# The states the frontend knows how to show (IngestionStatus in lib/types.ts).
+FRONTEND_STATUSES = {"not_started", "in_progress", "completed", "partial", "failed"}
+
 
 # ---- in-memory database ------------------------------------------------------
 
@@ -331,6 +334,9 @@ def test_ingestion_status_is_reported_with_the_target(api, db, provider):
     assert loaded["business_name"] == "Cafe"
 
 
+# ---- 2. computing an ingestion summary from persisted data -------------------
+
+
 def test_review_summary_uses_the_stored_ratings(api, db, provider):
     provider.byPlace[CAFE_ID] = CAFE_REVIEWS
     targetId = api.asUser("user_A").create("Cafe", CAFE_ID)["id"]
@@ -365,6 +371,74 @@ def test_summary_and_gemini_context_follow_changes_to_the_stored_reviews(api, db
     assert "Cafe pastries are fresh" not in ai.prompt()
     assert provider.calls == [CAFE_ID]
     assert len(ai.calls) == 2
+
+
+def test_the_summary_follows_the_latest_run_when_reviews_are_ingested_again(api, db, provider):
+    provider.byPlace[CAFE_ID] = [
+        raw("r1", 4, "First review", "2026-10-01 10:00:00"),
+        raw("r2", 5, "Second review", "2026-10-02 10:00:00"),
+        raw("r3", 3, "Third review", "2026-10-03 10:00:00"),
+        raw("r4", 9, "Rating out of range", None),  # skipped
+        raw("r5", 5, None, None),  # no text, skipped
+    ]
+    targetId = api.asUser("user_A").create("Cafe", CAFE_ID)["id"]
+
+    first = api.ingest(targetId)
+
+    assert first.json()["reviews_ingested"] == 3
+    loaded = api.target(targetId).json()
+    assert loaded["ingestion_status"] == "partial"
+    assert loaded["ingestion_skipped"] == 2
+    assert loaded["review_summary"] == {"review_count": 3, "average_rating": 4}
+
+    provider.byPlace[CAFE_ID] = [
+        raw("r1", 2, "First review, edited", "2026-10-01 10:00:00"),  # its rating changed
+        raw("r2", 5, "Second review", "2026-10-02 10:00:00"),
+        raw("r3", 3, "Third review", "2026-10-03 10:00:00"),
+        raw("r6", 5, "A new review", "2026-10-06 10:00:00"),
+    ]
+    second = api.ingest(targetId)
+
+    assert second.json()["reviews_ingested"] == 4
+    loaded = api.target(targetId).json()
+    assert loaded["ingestion_status"] == "completed"  # the latest run had nothing to skip
+    assert loaded["ingestion_skipped"] == 0  # and the first run's skips are not carried over
+    assert loaded["review_summary"] == {"review_count": 4, "average_rating": 3.75}
+    assert len(db.tables["reviews"]) == 4  # the edited review was updated, not added again
+    assert len(db.tables["ingestion_jobs"]) == 2
+
+
+def test_the_target_response_matches_what_the_frontend_reads(api, db, provider):
+    # The frontend (lib/targets-service.ts) reads these exact field names and status values.
+    # If one side renames something, this fails here instead of showing blank numbers on screen.
+    targetId = api.asUser("user_A").create("Cafe", CAFE_ID)["id"]
+    seen = []
+
+    def check():
+        loaded = api.target(targetId).json()
+        seen.append(loaded["ingestion_status"])
+        assert {
+            "id", "business_name", "platform", "source_url", "created_at",
+            "ingestion_status", "ingestion_error", "ingestion_skipped", "review_summary",
+        } <= set(loaded)
+        assert set(loaded["review_summary"]) == {"review_count", "average_rating"}
+
+    check()  # a target that has never been ingested
+
+    provider.byPlace[CAFE_ID] = [raw("r1", 5, "Good", None)]
+    api.ingest(targetId)
+    check()  # a clean run
+
+    provider.byPlace[CAFE_ID] = [raw("r1", 5, "Good", None), raw("r2", 9, "Bad rating", None)]
+    api.ingest(targetId)
+    check()  # a run with skipped records
+
+    provider.error = requests.ConnectionError("provider is down")
+    api.ingest(targetId)
+    check()  # a failed run
+
+    assert seen == ["not_started", "completed", "partial", "failed"]
+    assert set(seen) <= FRONTEND_STATUSES
 
 
 def test_malformed_and_duplicate_source_records_do_not_block_the_batch(api, db, provider):

@@ -26,10 +26,11 @@ Backend (`Back_End/.coveragerc`):
 - Not excluded but known to be untested: the check in `app/db.py` that stops the app from starting when the Supabase settings are missing. It runs when the module is imported, so a test would tell us very little.
 
 Frontend (`Front_End/clerk-nextjs/vitest.config.ts`):
-- Measured: `lib/` (service layer, validation, formatting) and `components/` (React components). Component tests render the real components in jsdom, with the network layer and toast notifications replaced by test doubles.
+- Measured: `lib/` (service layer, validation, formatting), `components/` (React components), `app/` (the pages and the `/api/backend` pass-through route) and `proxy.ts` (the login middleware). Component and page tests render the real code in jsdom, with the network layer and toast notifications replaced by test doubles. Route and middleware tests run in Node with Clerk replaced by a stand-in.
 - Excluded: test files themselves, and `lib/types.ts` (type definitions only, no runtime code).
 - Excluded: `components/ui/Toast.tsx`. The component tests replace the toast system with a mock, so this file is not exercised. Changes to it need a manual review until it has its own tests.
-- Not measured: the Next.js pages and routes in `app/` (the home page, the target page, the backend pass-through route) and `proxy.ts`. They are thin wrappers that hand data to the measured components, and they have no tests yet. This is a known gap, not a claim that they are tested. Add them to the `include` list in `vitest.config.ts` when tests exist.
+- Excluded: `app/layout.tsx` and any nested `layout.tsx`. These only set up the page shell (fonts, the Clerk provider and the header buttons) and contain no application logic.
+- Excluded: `app/**/sign-in/**` and `app/**/sign-up/**`. These pages only host Clerk's ready-made sign-in and sign-up screens, so there is no team-written behavior to test.
 
 ## 4. Running it locally
 
@@ -50,3 +51,8 @@ Run `git fetch origin main` first so `origin/main` is current. Commit your chang
 ## 5. Showing that the gate can fail
 
 Create a branch from `main`, add a small function with real logic and no test (for example in `Back_End/services/google_reviews.py` or `Front_End/clerk-nextjs/lib/format.ts`), push it and open a pull request into `main`. The coverage step fails and the merge is blocked, because none of the new lines are covered. Add tests for the function and push again to show the step passing. Close the pull request without merging, and delete the branch.
+
+### Result of the demonstration
+
+- Failing run (untested function added): <paste the link to the pull request and its failed run>
+- Passing run (tests added): <paste the link to the passing run>
