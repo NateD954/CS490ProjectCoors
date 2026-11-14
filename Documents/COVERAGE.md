@@ -26,10 +26,15 @@ Backend (`Back_End/.coveragerc`):
 - Not excluded but known to be untested: the check in `app/db.py` that stops the app from starting when the Supabase settings are missing. It runs when the module is imported, so a test would tell us very little.
 
 Frontend (`Front_End/clerk-nextjs/vitest.config.ts`):
-- Measured: `lib/` (service layer, validation, formatting) and `components/` (React components). Component tests render the real components in jsdom, with the network layer and toast notifications replaced by test doubles.
+- Measured: `lib/` (service layer, validation, formatting), `components/` (React components), `app/` (the pages and the backend pass-through route), and `proxy.ts` (the login middleware that decides which routes need a signed-in user).
+- How each kind is tested:
+  - Components and pages render in jsdom. The network layer, toast notifications and child components that have their own tests are replaced by test doubles.
+  - The target page reads its id inside an async server component, which a browser-style renderer cannot render directly. Its tests find that component in the page, run it, and render what it returns.
+  - The pass-through route is tested by calling its handlers with real `Request` objects while the login lookup and the outgoing request are faked.
+  - `proxy.ts` is tested with Clerk's middleware replaced by stand-ins, covering which paths need a login and which requests the middleware runs on.
 - Excluded: test files themselves, and `lib/types.ts` (type definitions only, no runtime code).
-- Excluded: `components/ui/Toast.tsx`. The component tests replace the toast system with a mock, so this file is not exercised. Changes to it need a manual review until it has its own tests.
-- Not measured: the Next.js pages and routes in `app/` (the home page, the target page, the backend pass-through route) and `proxy.ts`. They are thin wrappers that hand data to the measured components, and they have no tests yet. This is a known gap, not a claim that they are tested. Add them to the `include` list in `vitest.config.ts` when tests exist.
+- Excluded: `components/ui/Toast.tsx`. The tests replace the toast system with a mock, so this file is not exercised. Changes to it need a manual review until it has its own tests.
+- Excluded: `app/layout.tsx` and the sign-in and sign-up pages. They only connect Clerk's ready-made provider and sign-in screens to the app and contain no logic of ours. If they gain behavior, remove them from the exclusion list in `vitest.config.ts` and add tests.
 
 ## 4. Running it locally
 
@@ -45,7 +50,7 @@ Frontend, from `Front_End/clerk-nextjs`:
     npm run test:coverage
     pipx run diff-cover coverage/cobertura-coverage.xml --compare-branch=origin/main --fail-under=80
 
-Run `git fetch origin main` first so `origin/main` is current. Commit your changes before running diff-cover, or it reports on the committed difference only. The `term-missing` report and the diff-cover output both list the exact lines that are not covered, so you know what test to add.
+Run `git fetch origin main` first so `origin/main` is current. Commit your changes before running diff-cover, or it reports on the committed difference only. The coverage table and the diff-cover output both list the exact lines that are not covered, so you know what test to add.
 
 ## 5. Showing that the gate can fail
 
