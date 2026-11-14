@@ -1,26 +1,16 @@
 {
   "ExpandedNodes": [
     "",
-    "\\.github",
-    "\\.github\\workflows",
-    "\\Back_End",
-    "\\Back_End\\services",
-    "\\Back_End\\tests",
-<<<<<<< Updated upstream
     "\\Front_End",
     "\\Front_End\\clerk-nextjs",
+    "\\Front_End\\clerk-nextjs\\app",
+    "\\Front_End\\clerk-nextjs\\app\\home",
+    "\\Front_End\\clerk-nextjs\\app\\targets",
+    "\\Front_End\\clerk-nextjs\\app\\targets\\[id]",
     "\\Front_End\\clerk-nextjs\\components",
-    "\\Front_End\\clerk-nextjs\\lib",
-    "\\Front_End\\clerk-nextjs\\public",
-    "\\Front_End\\clerk-nextjs\\tests"
+    "\\Front_End\\clerk-nextjs\\components\\ui",
+    "\\Front_End\\clerk-nextjs\\lib"
   ],
-  "SelectedNode": "\\Front_End\\clerk-nextjs\\app\\api\\backend\\[...path]\\route.ts",
-=======
-    "\\Documents",
-    "\\Front_End",
-    "\\Front_End\\clerk-nextjs"
-  ],
-  "SelectedNode": "\\Database",
->>>>>>> Stashed changes
+  "SelectedNode": "\\Front_End\\clerk-nextjs\\app\\favicon.ico",
   "PreviewInSolutionExplorer": false
 }
