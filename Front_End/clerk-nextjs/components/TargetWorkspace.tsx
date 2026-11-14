@@ -22,7 +22,7 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-export function TargetWorkspace({ id }: { id: string }) {
+export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (name: string) => void }) {
   const toast = useToast();
   const [target, setTarget] = useState<AnalysisTarget | null>(null);
   const [state, setState] = useState<LoadState>("loading");
@@ -34,9 +34,10 @@ export function TargetWorkspace({ id }: { id: string }) {
       .then((t) => {
         setTarget(t);
         setState(t ? "ready" : "missing");
+        if (t) onLoaded?.(t.name); // S2-017: tell the page which target is active
       })
       .catch(() => setState("error"));
-  }, [id]);
+  }, [id, onLoaded]);
 
   useEffect(() => {
     load();
@@ -129,6 +130,10 @@ export function TargetWorkspace({ id }: { id: string }) {
 
       <Section title="Ingestion summary">
         <Card className="space-y-4">
+          {/* S2-017: show which target this summary is for */}
+          <p className="text-sm text-zinc-400">
+            Active target: <span className="font-medium text-zinc-100">{target.name}</span>
+          </p>
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-zinc-400">Latest run</span>
             <StatusBadge status={target.ingestionStatus} />
