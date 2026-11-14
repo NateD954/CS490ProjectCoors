@@ -8,7 +8,7 @@ import ReviewQA from "@/components/ReviewQA";
 async function WorkspaceLoader({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
-    <div className="flex flex-col gap-8">
+    <div key={id} className="flex flex-col gap-8">
       <TargetWorkspace id={id} />
       <ReviewQA targetId={id} />
     </div>

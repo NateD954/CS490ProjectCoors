@@ -57,9 +57,10 @@ export function TargetWorkspace({ id }: { id: string }) {
     try {
       setTarget(await startIngestion(target.id));
       setIngestionRuns((n) => n + 1);
-      toast.success("Ingestion started. This page updates when it finishes.");
+      toast.success("Ingestion finished.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start ingestion. Please try again.");
+      load();
     } finally {
       toast.dismiss(loadingId);
       setStarting(false);
@@ -101,12 +102,11 @@ export function TargetWorkspace({ id }: { id: string }) {
     );
   }
 
-  const label =
-    target.ingestionStatus === "not_started"
-      ? "Start ingestion"
-      : target.ingestionStatus === "in_progress"
-        ? "Ingestion in progress"
-        : "Run ingestion again";
+  const busy = starting || inProgress;
+  const label = busy
+    ? "Ingestion in progress"
+    : target.ingestionStatus === "not_started" ? "Start ingestion" : "Run ingestion again";
+  const summary = target.reviewSummary;
 
   return (
     <div className="space-y-8">
@@ -127,16 +127,27 @@ export function TargetWorkspace({ id }: { id: string }) {
         </Card>
       </Section>
 
-      <Section title="Ingestion" hint="Collect the reviews for this target so they can be analyzed.">
+      <Section title="Ingestion summary">
         <Card className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm text-zinc-400">Current state</span>
+            <span className="text-sm text-zinc-400">Latest run</span>
             <StatusBadge status={target.ingestionStatus} />
           </div>
           {target.ingestionStatus === "failed" && (
             <p className="text-sm text-red-400">{target.ingestionMessage ?? "Ingestion failed. You can try again."}</p>
           )}
-          <Button onClick={handleStart} loading={starting || inProgress} disabled={inProgress}>
+          {summary ? (
+            <dl className="grid gap-4 border-t border-zinc-800 pt-4 sm:grid-cols-3">
+              <Detail label="Stored reviews">{summary.count}</Detail>
+              <Detail label="Average rating">
+                {summary.averageRating === null ? "No ratings yet" : `${summary.averageRating.toFixed(2)} / 5`}
+              </Detail>
+              <Detail label="Skipped in latest run">{target.skippedReviews ?? "Not recorded"}</Detail>
+            </dl>
+          ) : (
+            <p className="text-sm text-zinc-400">Review totals are unavailable.</p>
+          )}
+          <Button onClick={handleStart} loading={busy} disabled={busy}>
             {label}
           </Button>
         </Card>
@@ -145,12 +156,6 @@ export function TargetWorkspace({ id }: { id: string }) {
       <Section title="Reviews" hint="Newest first.">
         {/* The key makes the list reload whenever ingestion runs or its state changes. */}
         <ReviewList key={`${target.ingestionStatus}-${ingestionRuns}`} targetId={target.id} />
-      </Section>
-
-      <Section title="Summary and questions">
-        <div className="rounded-xl border border-dashed border-zinc-700 p-5 text-zinc-400">
-          The ingestion summary and question-and-answer tools will appear here in a later sprint.
-        </div>
       </Section>
     </div>
   );

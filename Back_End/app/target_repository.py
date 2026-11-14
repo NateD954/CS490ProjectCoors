@@ -70,3 +70,9 @@ def getReviewsForTarget(client, targetId, ownerClerkId):
     )
 
     return res.data
+
+
+def getReviewSummary(client, targetId):
+    """Aggregate all persisted reviews for a target whose owner was already verified."""
+    res = client.rpc("get_target_review_summary", {"target_id": targetId}).execute()
+    return res.data[0]

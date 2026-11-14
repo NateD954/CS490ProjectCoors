@@ -1,6 +1,7 @@
 import os
 import requests
 import re
+from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -34,30 +35,51 @@ def getGooglePlaceData(dataId):
     return data["data"]
 
 
-# accepts json data from getGooglePlaceData
-# returns a list of reviews with author, rating, and review text
-def extractReviews(data):
-    reviews = []
+def parseReviews(data):
+    """Return usable reviews and the number of source records skipped."""
+    sourceReviews = data.get("reviews", [])
+    if not isinstance(sourceReviews, list):
+        raise TypeError("Expected a list of reviews from the review provider.")
 
-    for review in data.get("reviews", []):
+    reviews = []
+    seenIds = set()
+
+    for review in sourceReviews:
+        if not isinstance(review, dict):
+            continue
         reviewText = review.get("review_text")
         rating = review.get("rating")
+        reviewId = review.get("review_id")
+        date = review.get("review_datetime_utc")
 
-        if not reviewText:
+        if not isinstance(reviewText, str) or not reviewText.strip() or "\x00" in reviewText:
             continue
-
-        if rating not in [1, 2, 3, 4, 5]:
+        if isinstance(rating, bool) or rating not in (1, 2, 3, 4, 5):
+            continue
+        if reviewId is not None:
+            if not isinstance(reviewId, str) or "\x00" in reviewId or reviewId in seenIds:
+                continue
+        try:
+            date = datetime.fromisoformat(date).isoformat() if date is not None else None
+        except (TypeError, ValueError):
             continue
 
         reviews.append({
-            "reviewId": review.get("review_id"),
+            "reviewId": reviewId,
             "rating": rating,
             "reviewText": reviewText,
             "author": review.get("author_name"),
-            "date": review.get("review_datetime_utc"),
+            "date": date,
             "url": review.get("review_link")
         })
+        if reviewId is not None:
+            seenIds.add(reviewId)
 
+    return reviews, len(sourceReviews) - len(reviews)
+
+
+def extractReviews(data):
+    reviews, _ = parseReviews(data)
     return reviews
 
 
