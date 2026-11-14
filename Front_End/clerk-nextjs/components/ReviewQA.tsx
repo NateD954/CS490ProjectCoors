@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-export default function ReviewQA({ targetId }: { targetId: string }) {
+export default function ReviewQA({ targetId, targetName }: { targetId: string; targetName?: string }) {
   const { getToken } = useAuth();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -50,6 +50,12 @@ export default function ReviewQA({ targetId }: { targetId: string }) {
   return (
     <div className="p-4 mt-6 border rounded-lg bg-zinc-900 border-zinc-800 shadow-sm text-zinc-100">
       <h3 className="text-lg font-semibold mb-2 text-zinc-100">Ask ReviewLens AI</h3>
+      {/* S2-017: show which target the questions are about */}
+      {targetName && (
+        <p className="text-sm text-zinc-400 mb-3">
+          Active target: <span className="font-medium text-zinc-100">{targetName}</span>
+        </p>
+      )}
       
       <form onSubmit={handleAskQuestion} className="flex gap-2 mb-4">
         <input

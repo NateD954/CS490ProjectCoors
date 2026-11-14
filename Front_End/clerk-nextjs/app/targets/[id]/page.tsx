@@ -1,18 +1,12 @@
 import { Suspense } from "react";
 import { ToastProvider } from "@/components/ui/Toast";
-import { TargetWorkspace } from "@/components/TargetWorkspace";
+import { TargetPageContent } from "@/components/TargetPageContent";
 import { Spinner } from "@/components/ui/Spinner";
-import ReviewQA from "@/components/ReviewQA";
 
 // Reading `params` is request-time data, so Next.js wants it inside <Suspense>.
 async function WorkspaceLoader({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return (
-    <div key={id} className="flex flex-col gap-8">
-      <TargetWorkspace id={id} />
-      <ReviewQA targetId={id} />
-    </div>
-  );
+  return <TargetPageContent id={id} />;
 }
 
 export default function TargetPage({ params }: { params: Promise<{ id: string }> }) {

@@ -26,6 +26,12 @@ vi.mock("@/components/ReviewQA", async () => {
   };
 });
 
+// The switcher needs the Next.js router and has its own tests (TargetSwitcher.test.tsx).
+vi.mock("@/components/TargetSwitcher", async () => {
+  const { createElement } = await import("react");
+  return { TargetSwitcher: () => createElement("div", null, "switcher") };
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
