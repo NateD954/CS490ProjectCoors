@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-export default function ReviewQA({ targetId, targetName }: { targetId: string; targetName?: string }) {
+export default function ReviewQA({
+  targetId,
+  targetName,
+  blockedReason,
+}: {
+  targetId: string;
+  targetName?: string;
+  blockedReason?: string; // S2-020: set when the target has no reviews to ask about
+}) {
   const { getToken } = useAuth();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -12,7 +20,7 @@ export default function ReviewQA({ targetId, targetName }: { targetId: string; t
 
   const handleAskQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim()) return;
+    if (blockedReason || !question.trim()) return;
 
     setLoading(true);
     setError("");
@@ -57,6 +65,13 @@ export default function ReviewQA({ targetId, targetName }: { targetId: string; t
         </p>
       )}
       
+      {/* S2-020: explain why questions are unavailable instead of showing a normal Ask box */}
+      {blockedReason && (
+        <p role="status" className="mb-3 rounded-md border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-200">
+          {blockedReason}
+        </p>
+      )}
+
       <form onSubmit={handleAskQuestion} className="flex gap-2 mb-4">
         <input
           type="text"
@@ -64,11 +79,11 @@ export default function ReviewQA({ targetId, targetName }: { targetId: string; t
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Ask a question about these reviews..."
           className="flex-1 p-2 border rounded-md bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={loading}
+          disabled={loading || !!blockedReason}
         />
         <button
           type="submit"
-          disabled={loading || !question.trim()}
+          disabled={loading || !!blockedReason || !question.trim()}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-400 transition-colors"
         >
           {loading ? "Thinking..." : "Ask"}

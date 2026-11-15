@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import type { AnalysisTarget } from "@/lib/types";
+import { qaBlockedReason } from "@/lib/qa-state";
 import { TargetSwitcher } from "./TargetSwitcher";
 import { TargetWorkspace } from "./TargetWorkspace";
 import ReviewQA from "./ReviewQA";
@@ -12,12 +14,12 @@ export function TargetPageContent({ id }: { id: string }) {
 }
 
 function TargetPage({ id }: { id: string }) {
-  const [name, setName] = useState<string | undefined>();
+  const [target, setTarget] = useState<AnalysisTarget | undefined>();
   return (
     <div className="flex flex-col gap-8">
       <TargetSwitcher activeId={id} />
-      <TargetWorkspace id={id} onLoaded={setName} />
-      <ReviewQA targetId={id} targetName={name} />
+      <TargetWorkspace id={id} onLoaded={setTarget} />
+      <ReviewQA targetId={id} targetName={target?.name} blockedReason={qaBlockedReason(target)} />
     </div>
   );
 }

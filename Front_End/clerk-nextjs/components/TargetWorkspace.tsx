@@ -22,7 +22,7 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (name: string) => void }) {
+export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: AnalysisTarget) => void }) {
   const toast = useToast();
   const [target, setTarget] = useState<AnalysisTarget | null>(null);
   const [state, setState] = useState<LoadState>("loading");
@@ -34,7 +34,7 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (name
       .then((t) => {
         setTarget(t);
         setState(t ? "ready" : "missing");
-        if (t) onLoaded?.(t.name); // S2-017: tell the page which target is active
+        if (t) onLoaded?.(t); // S2-017/S2-020: tell the page which target is active and its state
       })
       .catch(() => setState("error"));
   }, [id, onLoaded]);
@@ -56,7 +56,9 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (name
     setStarting(true);
     const loadingId = toast.loading("Starting ingestion. Please wait.");
     try {
-      setTarget(await startIngestion(target.id));
+      const updated = await startIngestion(target.id);
+      setTarget(updated);
+      onLoaded?.(updated); // S2-020: unlock Q&A as soon as ingestion stores reviews
       setIngestionRuns((n) => n + 1);
       toast.success("Ingestion finished.");
     } catch (err) {
