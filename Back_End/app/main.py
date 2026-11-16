@@ -42,6 +42,7 @@ class IngestionInputError(ValueError):
 
 # The key is sent in a header, never in the URL, so it cannot end up in logs or error text.
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent"
+GEMINI_TIMEOUT_SECONDS = 45
 
 def saveReviews(rows: list) -> None:
     for attempt in range(2):
@@ -253,7 +254,7 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
     }
 
     try:
-        response = requests.post(GEMINI_URL, headers={"x-goog-api-key": apiKey}, json=payload, timeout=15)
+        response = requests.post(GEMINI_URL, headers={"x-goog-api-key": apiKey}, json=payload, timeout=GEMINI_TIMEOUT_SECONDS)
         response.raise_for_status()
         return {"answer": response.json()["candidates"][0]["content"]["parts"][0]["text"]}
     except requests.RequestException as e:

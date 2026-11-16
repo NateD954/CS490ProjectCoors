@@ -30,11 +30,11 @@ DECLINE = STRONG_DECLINE + [
 # Phrases that mean "the reviews do not contain this".
 LIMITATION = [
     r"\bno\s+(?:\w+\s+)?(?:mention|information|evidence|data|details?)",
-    r"(?:do|does|did)(?:\s+not|n(?:'|’)t)\s+(?:\w+\s+)?(?:mention|contain|include|discuss|address|say|provide|cover|specify)",
+    r"(?:do|does|did)(?:\s+not|n(?:'|’)t)\s+(?:\w+\s+)?(?:mention|contain|include|discuss|address|say|provide|cover|specify|confirm|indicate|state)",
     r"none\s+of\s+the\s+reviews",
     r"insufficient",
     r"\black",
-    r"not\s+enough",
+    r"not\s+(?:enough|sufficient)",
     rf"{_CANT}\s+(?:determine|tell|say|confirm|find|verify)",
     r"not\s+(?:specified|stated|available|covered|addressed|mentioned)",
     r"unclear",
