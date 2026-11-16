@@ -5,3 +5,12 @@ venv/
 .pytest_cache/
 Back_End/.venv/
 Back_End/.pytest_cache/
+.env.example
+Front_End/clerk-nextjs/.env.example
+*.example
+*.js
+*.ts
+*.map
+node_modules/
+.venv/
+*.example

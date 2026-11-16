@@ -1,0 +1,26 @@
+{
+  "name": "cs490projectcoors",
+  "version": "1.0.0",
+  "description": "ReviewLens collects Google Maps reviews for a business so they can be analyzed.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently -n back,front -c blue,green \"npm:dev:back\" \"npm:dev:front\"",
+    "dev:front": "npm --prefix Front_End/clerk-nextjs run dev",
+    "dev:back": "cd Back_End && .venv\\Scripts\\python -m uvicorn app.main:app --reload --port 8000",
+    "setup": "npm install && npm --prefix Front_End/clerk-nextjs install && cd Back_End && py -3.11 -m venv .venv && .venv\\Scripts\\python -m pip install -r requirements-dev.txt",
+    "test:back": "cd Back_End && .venv\\Scripts\\python -m pytest -v"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NateD954/CS490ProjectCoors.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/NateD954/CS490ProjectCoors/issues"
+  },
+  "homepage": "https://github.com/NateD954/CS490ProjectCoors#readme",
+  "devDependencies": {
+    "concurrently": "^10.0.7"
+  }
+}
