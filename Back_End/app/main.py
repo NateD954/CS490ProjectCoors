@@ -222,8 +222,7 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
         print("3. Sending direct REST request to Gemini (Bypassing SDK)...")
         prompt = f"Review Evidence:\n{reviews_context}\n\nUser Question: {request.question}"
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={os.getenv('GEMINI_API_KEY')}"
-        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={os.getenv('GEMINI_API_KEY')}"        
         payload = {
             "systemInstruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"parts": [{"text": prompt}]}]
