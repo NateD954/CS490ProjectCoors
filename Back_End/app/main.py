@@ -41,7 +41,7 @@ class IngestionInputError(ValueError):
     """An ingestion failure with a message safe to show to the user."""
 
 # The key is sent in a header, never in the URL, so it cannot end up in logs or error text.
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent"
 
 def saveReviews(rows: list) -> None:
     for attempt in range(2):
