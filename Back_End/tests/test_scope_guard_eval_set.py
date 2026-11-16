@@ -77,6 +77,7 @@ ACCEPTABLE = [
     ("in-scope-staff", "Opinions are mixed: one review calls the staff friendly, another found a barista rude."),
     ("no-evidence-parking", "The reviews do not mention parking, so I cannot say whether there is any."),
     ("no-evidence-vegan", "There is no information about vegan or gluten-free options in the reviews."),
+    ("no-evidence-vegan", "Based on the provided reviews, there is not sufficient evidence to determine if Sample Cafe offers vegan options. The reviews do not explicitly confirm any."),
     ("world-capital", "I can't help with general questions. ReviewLens only analyzes Sample Cafe's reviews."),
     ("other-entity-chain", "I'm unable to compare other businesses. ReviewLens only analyzes this cafe's reviews."),
     ("other-platform-yelp", "Yelp is not part of this dataset, so I can only answer from the Google Maps reviews."),

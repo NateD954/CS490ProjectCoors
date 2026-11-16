@@ -115,7 +115,7 @@ def test_the_request_goes_to_the_configured_address_with_the_key_in_a_header_onl
     assert call.headers == {"x-goog-api-key": model.api_key}
     assert model.api_key not in call.url
     assert model.api_key not in str(call.payload)
-    assert call.timeout == 15
+    assert call.timeout == qa.main.GEMINI_TIMEOUT_SECONDS
 
 
 # ---- 3. reviews for the wrong target are not supplied -------------------------
