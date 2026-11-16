@@ -167,6 +167,18 @@ describe("getTarget", () => {
     expect(calls()).toHaveLength(1);
   });
 
+  it("maps the server's stored review count and average rating", async () => {
+    routes(() => reply(row({
+      ingestion_status: "completed",
+      ingestion_skipped: 0,
+      review_summary: { review_count: 3, average_rating: 4.25 },
+    })));
+
+    const target = await getTarget("t1");
+    expect(target?.reviewSummary).toEqual({ count: 3, averageRating: 4.25 });
+    expect(target?.skippedReviews).toBe(0);
+  });
+
   it.each([[404], [403]])("returns null when the server answers %i", async (status) => {
     routes(() => reply({ detail: "nope" }, status));
 
@@ -190,22 +202,11 @@ describe("getTarget", () => {
     expect(calls()[0][0]).toBe("/api/backend/targets/a%20b%2Fc");
   });
 
-  it("falls back to stored reviews when the backend gives no state: reviews mean completed", async () => {
+  it("does not infer a successful run from review rows when no job state is returned", async () => {
     routes((url) => (url.endsWith("/reviews") ? reply([{ id: "r1" }]) : reply(row())));
 
-    expect((await getTarget("t1"))?.ingestionStatus).toBe("completed");
-  });
-
-  it("falls back to not started when there are no stored reviews", async () => {
-    routes((url) => (url.endsWith("/reviews") ? reply([]) : reply(row())));
-
     expect((await getTarget("t1"))?.ingestionStatus).toBe("not_started");
-  });
-
-  it("falls back to not started when the reviews cannot be loaded", async () => {
-    routes((url) => (url.endsWith("/reviews") ? reply({ detail: "boom" }, 500) : reply(row())));
-
-    expect((await getTarget("t1"))?.ingestionStatus).toBe("not_started");
+    expect(calls()).toHaveLength(1);
   });
 });
 

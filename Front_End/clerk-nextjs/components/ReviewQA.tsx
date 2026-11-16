@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-export default function ReviewQA({ targetId }: { targetId: string }) {
+export default function ReviewQA({
+  targetId,
+  targetName,
+  blockedReason,
+}: {
+  targetId: string;
+  targetName?: string;
+  blockedReason?: string; // S2-020: set when the target has no reviews to ask about
+}) {
   const { getToken } = useAuth();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -12,7 +20,7 @@ export default function ReviewQA({ targetId }: { targetId: string }) {
 
   const handleAskQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim()) return;
+    if (blockedReason || !question.trim()) return;
 
     setLoading(true);
     setError("");
@@ -50,7 +58,20 @@ export default function ReviewQA({ targetId }: { targetId: string }) {
   return (
     <div className="p-4 mt-6 border rounded-lg bg-zinc-900 border-zinc-800 shadow-sm text-zinc-100">
       <h3 className="text-lg font-semibold mb-2 text-zinc-100">Ask ReviewLens AI</h3>
+      {/* S2-017: show which target the questions are about */}
+      {targetName && (
+        <p className="text-sm text-zinc-400 mb-3">
+          Active target: <span className="font-medium text-zinc-100">{targetName}</span>
+        </p>
+      )}
       
+      {/* S2-020: explain why questions are unavailable instead of showing a normal Ask box */}
+      {blockedReason && (
+        <p role="status" className="mb-3 rounded-md border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-200">
+          {blockedReason}
+        </p>
+      )}
+
       <form onSubmit={handleAskQuestion} className="flex gap-2 mb-4">
         <input
           type="text"
@@ -58,11 +79,11 @@ export default function ReviewQA({ targetId }: { targetId: string }) {
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Ask a question about these reviews..."
           className="flex-1 p-2 border rounded-md bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={loading}
+          disabled={loading || !!blockedReason}
         />
         <button
           type="submit"
-          disabled={loading || !question.trim()}
+          disabled={loading || !!blockedReason || !question.trim()}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-400 transition-colors"
         >
           {loading ? "Thinking..." : "Ask"}

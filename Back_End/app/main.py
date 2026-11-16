@@ -7,12 +7,12 @@ from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.db import supabaseClient
 from app.auth import getCurrentUserId
-from app.target_repository import saveTarget, listTargetsForOwner
-from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, extractReviews
+from app.target_repository import getReviewSummary, saveTarget, listTargetsForOwner
+from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, parseReviews
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +31,17 @@ class TargetCreateRequest(BaseModel):
     platform: str
     sourceUrl: str
 
+MAX_QUESTION_LENGTH = 1000  # keep in step with the limit in the frontend's ReviewQA component
+
 class QuestionRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
+
+
+class IngestionInputError(ValueError):
+    """An ingestion failure with a message safe to show to the user."""
+
+# The key is sent in a header, never in the URL, so it cannot end up in logs or error text.
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
 
 def saveReviews(rows: list) -> None:
     for attempt in range(2):
@@ -52,7 +61,7 @@ def withIngestionStatus(targets: list) -> list:
     ids = [t["id"] for t in targets]
     jobs = (
         supabaseClient.table("ingestion_jobs")
-        .select("analysis_target_id,status,error_message,created_at")
+        .select("analysis_target_id,status,error_message,created_at,reviews_skipped")
         .in_("analysis_target_id", ids)
         .order("created_at", desc=True)
         .execute()
@@ -64,15 +73,20 @@ def withIngestionStatus(targets: list) -> list:
 
     for t in targets:
         job = latest.get(t["id"])
-        state, error = "not_started", None
+        state, error, skipped = "not_started", None, None
         if job:
             state = JOB_STATUS_TO_UI.get(job["status"], "not_started")
             error = job.get("error_message")
-            started = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
-            if state == "in_progress" and datetime.now(timezone.utc) - started > STALE_JOB_AFTER:
-                state, error = "failed", "Ingestion did not finish. You can try again."
+            skipped = job.get("reviews_skipped")
+            if state == "completed" and skipped:
+                state = "partial"
+            elif state == "in_progress":
+                started = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
+                if datetime.now(timezone.utc) - started > STALE_JOB_AFTER:
+                    state, error = "failed", "Ingestion did not finish. You can try again."
         t["ingestion_status"] = state
         t["ingestion_error"] = error
+        t["ingestion_skipped"] = skipped
     return targets
 
 def isGoogleUrl(url: str) -> bool:
@@ -116,7 +130,7 @@ def createTarget(body: TargetCreateRequest, userId: str = Depends(getCurrentUser
     if body.platform != "GOOGLE_MAPS":
         errors.append(fieldError("platform", "Unsupported review platform."))
     if errors:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=errors)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=errors)
 
     return saveTarget(supabaseClient, userId, dataId, name, sourceUrl)
 
@@ -126,7 +140,9 @@ def listTargets(userId: str = Depends(getCurrentUserId)):
 
 @app.get("/api/targets/{targetId}")
 def getTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
-    return withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
+    target = withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
+    target["review_summary"] = getReviewSummary(supabaseClient, targetId)
+    return target
 
 @app.get("/api/targets/{targetId}/reviews")
 def getTargetReviews(
@@ -157,12 +173,15 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
         "started_at": nowIso()
     }).execute().data[0]
 
+    skipped = None
     try:
         dataId = getGoogleDataIdFromURL(target["source_url"])
         if not dataId:
-            raise ValueError("The target's source URL does not contain a Google Maps place id.")
+            raise IngestionInputError("The target's source URL does not contain a Google Maps place id.")
 
-        reviews = extractReviews(getGooglePlaceData(dataId))
+        reviews, skipped = parseReviews(getGooglePlaceData(dataId))
+        if not reviews and skipped:
+            raise IngestionInputError("The review provider returned no usable reviews.")
         rows = [
             {
                 "analysis_target_id": targetId,
@@ -176,18 +195,18 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
         if rows:
             saveReviews(rows)
 
-        result = {"status": "completed", "reviews_ingested": len(rows), "completed_at": nowIso()}
-    except ValueError as e:
-        result = {"status": "failed", "error_message": str(e), "completed_at": nowIso()}
+        result = {"status": "completed", "reviews_ingested": len(rows)}
+    except IngestionInputError as e:
+        result = {"status": "failed", "error_message": str(e)}
     except Exception as e:
         detail = "" if isinstance(e, requests.RequestException) else e
         logger.warning("Ingestion failed for target %s: %s: %s", targetId, type(e).__name__, detail)
         result = {
             "status": "failed",
             "error_message": "Could not fetch reviews from the review provider. Please try again.",
-            "completed_at": nowIso()
         }
 
+    result.update(reviews_skipped=skipped, completed_at=nowIso())
     updatedJob = supabaseClient.table("ingestion_jobs").update(result).eq("id", job["id"]).execute().data[0]
     if updatedJob["status"] == "failed":
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=updatedJob["error_message"])
@@ -195,12 +214,10 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
 
 @app.post("/api/targets/{targetId}/ask")
 def ask_review_question(targetId: str, request: QuestionRequest, userId: str = Depends(getCurrentUserId)):
-    verifyTargetOwnership(targetId, userId)
-    
-    print("1. Fetching reviews from Supabase...")
+    target = verifyTargetOwnership(targetId, userId)
+
     res = supabaseClient.table("reviews").select("review_text").eq("analysis_target_id", targetId).execute()
     reviews_data = res.data
-    print(f"2. Successfully fetched {len(reviews_data)} reviews!")
 
     if not reviews_data:
         return {"answer": "No reviews have been ingested for this target at the moment. Please ingest data first before asking questions."}
@@ -212,34 +229,37 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
          return {"answer": "The ingested reviews do not contain any text at the moment."}
 
     system_prompt = (
-        "You are ReviewLens AI. Answer the user's question based strictly on the provided review evidence. "
-        "If the reviews do not contain sufficient evidence to answer the question, clearly state that "
-        "there is not enough information. Do not invent answers, guess, or use outside world knowledge. "
-        "If the user asks about a different product, entity, or general knowledge, politely decline to answer."
+        f"You are ReviewLens AI, analyzing {target['business_name']} "
+        f"using reviews from {target['platform']}. "
+        "Answer questions using only the provided review evidence. "
+        "Never invent information, guess, or use outside knowledge. "
+        "If the reviews lack sufficient evidence, clearly explain that limitation. "
+        "Decline unrelated general-knowledge questions, questions about other "
+        "businesses, products, or locations, and questions about review platforms "
+        "not represented in the active dataset. "
+        "When declining, briefly explain that ReviewLens only analyzes "
+        "the active business's provided reviews."
     )
 
+    apiKey = os.getenv("GEMINI_API_KEY")
+    if not apiKey:
+        logger.error("GEMINI_API_KEY is not set")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The AI assistant is not available right now.")
+
+    prompt = f"Review Evidence:\n{reviews_context}\n\nUser Question: {request.question}"
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+
     try:
-        print("3. Sending direct REST request to Gemini (Bypassing SDK)...")
-        prompt = f"Review Evidence:\n{reviews_context}\n\nUser Question: {request.question}"
-        
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={os.getenv('GEMINI_API_KEY')}"        
-        payload = {
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"parts": [{"text": prompt}]}]
-        }
-        
-        response = requests.post(url, json=payload, timeout=15)
+        response = requests.post(GEMINI_URL, headers={"x-goog-api-key": apiKey}, json=payload, timeout=15)
         response.raise_for_status()
-        
-        answer_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        
-        print("4. Success! Returning answer to frontend.")
-        return {"answer": answer_text}
-        
-    except requests.exceptions.RequestException as e:
-        error_details = e.response.text if hasattr(e, 'response') and e.response else str(e)
-        print(f"FAILED AT STEP 3 (Network): {error_details}")
-        raise HTTPException(status_code=500, detail="Failed to connect to AI provider. Please try again.")
-    except Exception as e:
-        print(f"FAILED AT STEP 3 (Parsing): {e}")
-        raise HTTPException(status_code=500, detail="Failed to process AI response.")
+        return {"answer": response.json()["candidates"][0]["content"]["parts"][0]["text"]}
+    except requests.RequestException as e:
+        # Log only the error type: the text of these errors can include request details.
+        logger.warning("AI provider request failed: %s", type(e).__name__)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to connect to AI provider. Please try again.")
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        logger.warning("Unexpected AI provider response: %s", type(e).__name__)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to process AI response.")

@@ -3,7 +3,12 @@
 // edits an owner. Keep these field names in sync with the backend teammate's
 // API responses (or map their response to this shape in targets-service.ts).
 
-export type IngestionStatus = "not_started" | "in_progress" | "completed" | "failed";
+export type IngestionStatus = "not_started" | "in_progress" | "completed" | "partial" | "failed";
+
+export type ReviewSummary = {
+  count: number;
+  averageRating: number | null;
+};
 
 export type AnalysisTarget = {
   id: string; // unique target identifier
@@ -13,6 +18,8 @@ export type AnalysisTarget = {
   createdAt: string; // ISO timestamp
   ingestionStatus: IngestionStatus; // basic ingestion state
   ingestionMessage?: string; // optional detail, e.g. a failure reason
+  skippedReviews?: number; // latest ingestion job
+  reviewSummary?: ReviewSummary;
 };
 
 // What the user submits. Platform and owner are NOT part of this: the platform

@@ -45,6 +45,11 @@ class FakeClient:
     def table(self, name):
         return FakeQuery(self.tables[name])
 
+    def rpc(self, name, params):
+        assert name == "get_target_review_summary"
+        assert params["target_id"] == self.tables["analysis_targets"][0]["id"]
+        return FakeQuery([{"review_count": 0, "average_rating": None}])
+
 
 @pytest.fixture
 def targetA(monkeypatch):

@@ -65,7 +65,18 @@ ON public.reviews(analysis_target_id);
 ALTER TABLE public.reviews
 ENABLE ROW LEVEL SECURITY;
 
+CREATE OR REPLACE FUNCTION public.get_target_review_summary(target_id UUID)
+RETURNS TABLE (review_count BIGINT, average_rating NUMERIC)
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = ''
+AS $$
+    SELECT COUNT(*), AVG(r.rating)
+    FROM public.reviews AS r
+    WHERE r.analysis_target_id = target_id;
+$$;
 
+-- The backend verifies the Clerk owner before calling this function.
+REVOKE EXECUTE ON FUNCTION public.get_target_review_summary(UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_target_review_summary(UUID) TO service_role;
 
 -- ============================================
 -- 3. Ingestion Jobs
@@ -90,6 +101,8 @@ CREATE TABLE public.ingestion_jobs (
 
     reviews_ingested INTEGER NOT NULL DEFAULT 0
         CHECK (reviews_ingested >= 0),
+
+    reviews_skipped INTEGER CHECK (reviews_skipped >= 0),
 
     error_message TEXT,
 

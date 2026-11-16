@@ -1,4 +1,6 @@
-from services.google_reviews import extractReviews
+import pytest
+
+from services.google_reviews import extractReviews, parseReviews
 
 def test_extract_reviews():
     fakeData = {
@@ -50,6 +52,7 @@ def test_missing_text():
     }
 
     reviews = extractReviews(fakeData)
+    assert reviews == []
 
 # should skip reviews with an invalid rating
 def test_invalid_rating():
@@ -86,4 +89,7 @@ def test_missing_optional_fields():
     assert reviews[0]["date"] is None
     assert reviews[0]["url"] is None
 
-    assert len(reviews) == 1
+
+def test_a_malformed_review_collection_cannot_be_mistaken_for_an_empty_result():
+    with pytest.raises(TypeError, match="Expected a list of reviews"):
+        parseReviews({"reviews": None})
