@@ -299,3 +299,10 @@ def get_qa_history(targetId: str, userId: str = Depends(getCurrentUserId)):
         .execute()
     )
     return res.data or []
+
+
+@app.delete("/api/targets/{targetId}/history", status_code=status.HTTP_204_NO_CONTENT)
+def clear_qa_history(targetId: str, userId: str = Depends(getCurrentUserId)):
+    verifyTargetOwnership(targetId, userId)
+    supabaseClient.table("qa_history").delete().eq("analysis_target_id", targetId).execute()
+    return None

@@ -79,3 +79,39 @@ def test_s3_007_cross_user_cannot_read_history():
 
         res = client.get("/api/targets/target_1/history")
         assert res.status_code == 403
+
+
+def test_s3_008_clear_history_preserves_target_and_reviews():
+    override_user("user_a")
+    deleted_tables = []
+
+    with patch("app.main.supabaseClient") as mock_sb:
+        def table_router(name):
+            tbl = MagicMock()
+            if name == "analysis_targets":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = [
+                    {"id": "target_1", "owner_clerk_id": "user_a"}
+                ]
+            elif name == "qa_history":
+                tbl.delete.return_value.eq.side_effect = (
+                    lambda col, val: deleted_tables.append((name, val)) or MagicMock()
+                )
+            return tbl
+
+        mock_sb.table.side_effect = table_router
+
+        res = client.delete("/api/targets/target_1/history")
+        assert res.status_code == 204
+        assert deleted_tables == [("qa_history", "target_1")]
+
+
+def test_s3_008_cross_user_cannot_clear_history():
+    override_user("user_b")
+
+    with patch("app.main.supabaseClient") as mock_sb:
+        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+            {"id": "target_1", "owner_clerk_id": "user_a"}
+        ]
+
+        res = client.delete("/api/targets/target_1/history")
+        assert res.status_code == 403
