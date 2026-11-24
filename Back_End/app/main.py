@@ -264,3 +264,25 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
     except (KeyError, IndexError, TypeError, ValueError) as e:
         logger.warning("Unexpected AI provider response: %s", type(e).__name__)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to process AI response.")
+
+
+        saved_res = (
+        supabaseClient.table("qa_history")
+        .insert({
+            "analysis_target_id": targetId,
+            "question": request.question,
+            "answer": answer,
+            "created_at": nowIso(),
+        })
+        .execute()
+    )
+    saved_rows = saved_res.data or []
+    if saved_rows:
+        saved = saved_rows[0]
+        return {
+            "id": saved.get("id"),
+            "question": saved.get("question", request.question),
+            "answer": saved.get("answer", answer),
+            "created_at": saved.get("created_at"),
+        }
+    return {"answer": answer}
