@@ -77,6 +77,36 @@ describe("ReviewQA", () => {
     expect(await screen.findByText("Free lot behind the building.")).toBeTruthy();
   });
 
+  it("clears persisted Q&A history when Clear Q&A History is clicked", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith("/history") && init?.method === "DELETE") {
+        return { ok: true, status: 204 };
+      }
+      if (String(url).endsWith("/history")) {
+        return {
+          ok: true,
+          json: async () => [
+            { id: "m1", question: "How is parking?", answer: "Free lot behind the building." },
+          ],
+        };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    setup();
+
+    expect(await screen.findByText("Q: How is parking?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear Q&A History" }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText("Q: How is parking?")).toBeNull();
+    });
+    const deleteCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith("/targets/t1/history") && init?.method === "DELETE"
+    );
+    expect(deleteCall).toBeTruthy();
+  });
+
   it("shows Thinking... and disables the input while waiting for the answer", async () => {
     let finish!: (value: unknown) => void;
     fetchMock.mockImplementation((url: string) => {

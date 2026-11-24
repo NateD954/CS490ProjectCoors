@@ -24,6 +24,7 @@ export default function ReviewQA({
   const [history, setHistory] = useState<QAHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [error, setError] = useState("");
 
   // S3-007: Restore persisted Q&A history when opening or switching targets
@@ -105,9 +106,54 @@ export default function ReviewQA({
     }
   };
 
+  // S3-008: Clear Q&A history for the active target without deleting target or reviews
+  const handleClearHistory = async () => {
+    if (clearing || history.length === 0) return;
+
+    setClearing(true);
+    setError("");
+
+    try {
+      const token = await getToken();
+      const response = await fetch(`http://localhost:8000/api/targets/${targetId}/history`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to clear Q&A history. Please try again.");
+      }
+
+      setHistory([]);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(String(err));
+      }
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div className="p-4 mt-6 border rounded-lg bg-zinc-900 border-zinc-800 shadow-sm text-zinc-100">
-      <h3 className="text-lg font-semibold mb-2 text-zinc-100">Ask ReviewLens AI</h3>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h3 className="text-lg font-semibold text-zinc-100">Ask ReviewLens AI</h3>
+        {history.length > 0 && (
+          <button
+            type="button"
+            onClick={handleClearHistory}
+            disabled={clearing || loading}
+            className="text-xs px-3 py-1.5 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-50 transition-colors"
+          >
+            {clearing ? "Clearing..." : "Clear Q&A History"}
+          </button>
+        )}
+      </div>
+
       {/* S2-017: show which target the questions are about */}
       {targetName && (
         <p className="text-sm text-zinc-400 mb-3">
