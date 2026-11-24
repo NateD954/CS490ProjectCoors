@@ -51,21 +51,28 @@ async function askQuestion(question: string) {
 describe("Switching from target A to target B", () => {
   it("sends the next question to B and not A, and clears A's answer", async () => {
     vi.stubGlobal("fetch", fetchMock);
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ answer: "An answer." }) });
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).endsWith("/history")) {
+        return { ok: true, json: async () => [] };
+      }
+      return { ok: true, json: async () => ({ answer: "An answer." }) };
+    });
     getTargetMock.mockImplementation(async (id) => (id === "a" ? A : B));
     listMock.mockResolvedValue([A, B]);
 
     const view = render(<TargetPageContent id="a" />);
     await screen.findByText("Stored reviews");
     await askQuestion("What about A?");
-    expect(String(fetchMock.mock.calls[0][0])).toContain("/targets/a/ask");
+    const askCallsAfterA = fetchMock.mock.calls.filter(([url]) => String(url).includes("/ask"));
+    expect(String(askCallsAfterA[0][0])).toContain("/targets/a/ask");
 
     view.rerender(<TargetPageContent id="b" />);
     await screen.findByText("reviews for b");
 
     expect(screen.queryByText("An answer.")).toBeNull(); // A's answer is gone
     await askQuestion("What about B?");
-    const [url, init] = fetchMock.mock.calls[1];
+    const askCallsAfterB = fetchMock.mock.calls.filter(([url]) => String(url).includes("/ask"));
+    const [url, init] = askCallsAfterB[1];
     expect(String(url)).toContain("/targets/b/ask");
     expect(String(url)).not.toContain("/targets/a/");
     expect(JSON.parse(init.body)).toEqual({ question: "What about B?" });

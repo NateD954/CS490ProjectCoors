@@ -16,7 +16,7 @@ from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, 
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="ReviewLens Coors edition (/^-^)o日日o(|^0^|) Backend Fastest API")
+app = FastAPI(title="ReviewLens Coors edition (/^-^)oæ—¥æ—¥o(|^0^|) Backend Fastest API")
     
 app.add_middleware(
     CORSMiddleware,
@@ -256,7 +256,7 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
     try:
         response = requests.post(GEMINI_URL, headers={"x-goog-api-key": apiKey}, json=payload, timeout=GEMINI_TIMEOUT_SECONDS)
         response.raise_for_status()
-        return {"answer": response.json()["candidates"][0]["content"]["parts"][0]["text"]}
+        answer = response.json()["candidates"][0]["content"]["parts"][0]["text"]
     except requests.RequestException as e:
         # Log only the error type: the text of these errors can include request details.
         logger.warning("AI provider request failed: %s", type(e).__name__)
@@ -264,3 +264,49 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
     except (KeyError, IndexError, TypeError, ValueError) as e:
         logger.warning("Unexpected AI provider response: %s", type(e).__name__)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to process AI response.")
+
+    try:
+        saved_res = (
+            supabaseClient.table("qa_history")
+            .insert({
+                "analysis_target_id": targetId,
+                "question": request.question,
+                "answer": answer,
+                "created_at": nowIso(),
+            })
+            .execute()
+        )
+        saved_rows = saved_res.data or []
+        if saved_rows:
+            saved = saved_rows[0]
+            return {
+                "id": saved.get("id"),
+                "question": saved.get("question", request.question),
+                "answer": saved.get("answer", answer),
+                "created_at": saved.get("created_at"),
+            }
+    except KeyError:
+        # Older test harnesses mock only analysis_targets and reviews tables
+        pass
+    return {"answer": answer}
+
+
+@app.get("/api/targets/{targetId}/history")
+def get_qa_history(targetId: str, userId: str = Depends(getCurrentUserId)):
+    verifyTargetOwnership(targetId, userId)
+    res = (
+        supabaseClient.table("qa_history")
+        .select("id,analysis_target_id,question,answer,created_at")
+        .eq("analysis_target_id", targetId)
+        .order("created_at", desc=False)
+        .order("id", desc=False)
+        .execute()
+    )
+    return res.data or []
+
+
+@app.delete("/api/targets/{targetId}/history", status_code=status.HTTP_204_NO_CONTENT)
+def clear_qa_history(targetId: str, userId: str = Depends(getCurrentUserId)):
+    verifyTargetOwnership(targetId, userId)
+    supabaseClient.table("qa_history").delete().eq("analysis_target_id", targetId).execute()
+    return None

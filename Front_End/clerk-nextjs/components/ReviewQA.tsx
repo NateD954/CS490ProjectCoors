@@ -1,7 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+
+export interface QAHistoryEntry {
+  id?: string;
+  question: string;
+  answer: string;
+  created_at?: string;
+}
 
 export default function ReviewQA({
   targetId,
@@ -14,21 +21,63 @@ export default function ReviewQA({
 }) {
   const { getToken } = useAuth();
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
+  const [historyState, setHistoryState] = useState<{
+    targetId: string;
+    entries: QAHistoryEntry[];
+  }>({ targetId, entries: [] });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loadedTargetId, setLoadedTargetId] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [errorState, setErrorState] = useState<{ targetId: string; message: string }>({
+    targetId,
+    message: "",
+  });
+
+  const history = historyState.targetId === targetId ? historyState.entries : [];
+  const error = errorState.targetId === targetId ? errorState.message : "";
+  const historyLoading = loadedTargetId !== targetId;
+
+  // S3-007: Restore persisted Q&A history when opening or switching targets
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        const token = await getToken();
+        const response = await fetch(`http://localhost:8000/api/targets/${targetId}/history`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response?.ok) return;
+        const data = await response.json();
+        if (active && Array.isArray(data)) {
+          setHistoryState({ targetId, entries: data });
+        }
+      } catch {
+        // Ignore history fetch errors so user can still ask new questions
+      } finally {
+        if (active) setLoadedTargetId(targetId);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetId]);
 
   const handleAskQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (blockedReason || !question.trim()) return;
+    const trimmedQuestion = question.trim();
+    if (blockedReason || !trimmedQuestion) return;
 
     setLoading(true);
-    setError("");
-    setAnswer("");
+    setErrorState({ targetId, message: "" });
 
     try {
       const token = await getToken();
-      
+
       const response = await fetch(`http://localhost:8000/api/targets/${targetId}/ask`, {
         method: "POST",
         headers: {
@@ -43,28 +92,73 @@ export default function ReviewQA({
       }
 
       const data = await response.json();
-      setAnswer(data.answer);
+      setHistoryState((prev) => ({
+        targetId,
+        entries: [
+          ...(prev.targetId === targetId ? prev.entries : []),
+          {
+            id: data.id,
+            question: data.question ?? trimmedQuestion,
+            answer: data.answer,
+            created_at: data.created_at,
+          },
+        ],
+      }));
+      setQuestion("");
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        setErrorState({ targetId, message: err.message });
       } else {
-        setError(String(err));
+        setErrorState({ targetId, message: String(err) });
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // S3-008: Clear Q&A history for the active target without deleting target or reviews
+  const handleClearHistory = async () => {
+    if (clearing || history.length === 0) return;
+
+    setClearing(true);
+    setErrorState({ targetId, message: "" });
+
+    try {
+      const token = await getToken();
+      const response = await fetch(`http://localhost:8000/api/targets/${targetId}/history`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to clear Q&A history. Please try again.");
+      }
+
+      setHistoryState({ targetId, entries: [] });
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorState({ targetId, message: err.message });
+      } else {
+        setErrorState({ targetId, message: String(err) });
+      }
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div className="p-4 mt-6 border rounded-lg bg-zinc-900 border-zinc-800 shadow-sm text-zinc-100">
       <h3 className="text-lg font-semibold mb-2 text-zinc-100">Ask ReviewLens AI</h3>
+
       {/* S2-017: show which target the questions are about */}
       {targetName && (
         <p className="text-sm text-zinc-400 mb-3">
           Active target: <span className="font-medium text-zinc-100">{targetName}</span>
         </p>
       )}
-      
+
       {/* S2-020: explain why questions are unavailable instead of showing a normal Ask box */}
       {blockedReason && (
         <p role="status" className="mb-3 rounded-md border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-200">
@@ -91,10 +185,29 @@ export default function ReviewQA({
       </form>
 
       {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
-      
-      {answer && (
-        <div className="bg-zinc-950 p-4 rounded-md border border-zinc-800 mt-4">
-          <p className="text-zinc-300 whitespace-pre-wrap">{answer}</p>
+
+      {historyLoading && history.length === 0 && (
+        <p className="text-sm text-zinc-400">Loading conversation history...</p>
+      )}
+
+      {history.length > 0 && (
+        <div className="space-y-3 mt-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              disabled={clearing || loading}
+              className="text-xs px-3 py-1.5 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-50 transition-colors"
+            >
+              {clearing ? "Clearing..." : "Clear Q&A History"}
+            </button>
+          </div>
+          {history.map((entry, idx) => (
+            <div key={entry.id ?? idx} className="bg-zinc-950 p-4 rounded-md border border-zinc-800 space-y-2">
+              <p className="text-sm font-medium text-blue-400">Q: {entry.question}</p>
+              <p className="text-zinc-300 whitespace-pre-wrap">{entry.answer}</p>
+            </div>
+          ))}
         </div>
       )}
     </div>
