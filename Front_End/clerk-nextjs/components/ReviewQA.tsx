@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
 export interface QAHistoryEntry {
@@ -23,7 +23,41 @@ export default function ReviewQA({
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<QAHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // S3-007: Restore persisted Q&A history when opening or switching targets
+  useEffect(() => {
+    let active = true;
+    setHistory([]);
+    setError("");
+    setHistoryLoading(true);
+
+    (async () => {
+      try {
+        const token = await getToken();
+        const response = await fetch(`http://localhost:8000/api/targets/${targetId}/history`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response?.ok) return;
+        const data = await response.json();
+        if (active && Array.isArray(data)) {
+          setHistory(data);
+        }
+      } catch {
+        // Ignore history fetch errors so user can still ask new questions
+      } finally {
+        if (active) setHistoryLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetId]);
 
   const handleAskQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +141,10 @@ export default function ReviewQA({
       </form>
 
       {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+
+      {historyLoading && history.length === 0 && (
+        <p className="text-sm text-zinc-400">Loading conversation history...</p>
+      )}
 
       {history.length > 0 && (
         <div className="space-y-3 mt-4">
