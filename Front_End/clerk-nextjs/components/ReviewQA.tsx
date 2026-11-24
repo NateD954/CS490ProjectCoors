@@ -3,6 +3,13 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
+export interface QAHistoryEntry {
+  id?: string;
+  question: string;
+  answer: string;
+  created_at?: string;
+}
+
 export default function ReviewQA({
   targetId,
   targetName,
@@ -14,21 +21,21 @@ export default function ReviewQA({
 }) {
   const { getToken } = useAuth();
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
+  const [history, setHistory] = useState<QAHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleAskQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (blockedReason || !question.trim()) return;
+    const trimmedQuestion = question.trim();
+    if (blockedReason || !trimmedQuestion) return;
 
     setLoading(true);
     setError("");
-    setAnswer("");
 
     try {
       const token = await getToken();
-      
+
       const response = await fetch(`http://localhost:8000/api/targets/${targetId}/ask`, {
         method: "POST",
         headers: {
@@ -43,7 +50,16 @@ export default function ReviewQA({
       }
 
       const data = await response.json();
-      setAnswer(data.answer);
+      setHistory((prev) => [
+        ...prev,
+        {
+          id: data.id,
+          question: data.question ?? trimmedQuestion,
+          answer: data.answer,
+          created_at: data.created_at,
+        },
+      ]);
+      setQuestion("");
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -64,7 +80,7 @@ export default function ReviewQA({
           Active target: <span className="font-medium text-zinc-100">{targetName}</span>
         </p>
       )}
-      
+
       {/* S2-020: explain why questions are unavailable instead of showing a normal Ask box */}
       {blockedReason && (
         <p role="status" className="mb-3 rounded-md border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-200">
@@ -91,10 +107,15 @@ export default function ReviewQA({
       </form>
 
       {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
-      
-      {answer && (
-        <div className="bg-zinc-950 p-4 rounded-md border border-zinc-800 mt-4">
-          <p className="text-zinc-300 whitespace-pre-wrap">{answer}</p>
+
+      {history.length > 0 && (
+        <div className="space-y-3 mt-4">
+          {history.map((entry, idx) => (
+            <div key={entry.id ?? idx} className="bg-zinc-950 p-4 rounded-md border border-zinc-800 space-y-2">
+              <p className="text-sm font-medium text-blue-400">Q: {entry.question}</p>
+              <p className="text-zinc-300 whitespace-pre-wrap">{entry.answer}</p>
+            </div>
+          ))}
         </div>
       )}
     </div>
