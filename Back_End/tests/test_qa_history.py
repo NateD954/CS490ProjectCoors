@@ -10,7 +10,8 @@ def override_user(user_id: str):
     app.dependency_overrides[getCurrentUserId] = lambda: user_id
 
 
-def test_s3_006_and_s3_007_persist_and_restore_qa_history_per_target():
+def test_s3_006_and_s3_007_persist_and_restore_qa_history_per_target(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     override_user("user_a")
     histories = {"target_1": [], "target_2": []}
 
