@@ -21,18 +21,25 @@ export default function ReviewQA({
 }) {
   const { getToken } = useAuth();
   const [question, setQuestion] = useState("");
-  const [history, setHistory] = useState<QAHistoryEntry[]>([]);
+  const [historyState, setHistoryState] = useState<{
+    targetId: string;
+    entries: QAHistoryEntry[];
+  }>({ targetId, entries: [] });
   const [loading, setLoading] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [loadedTargetId, setLoadedTargetId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
-  const [error, setError] = useState("");
+  const [errorState, setErrorState] = useState<{ targetId: string; message: string }>({
+    targetId,
+    message: "",
+  });
+
+  const history = historyState.targetId === targetId ? historyState.entries : [];
+  const error = errorState.targetId === targetId ? errorState.message : "";
+  const historyLoading = loadedTargetId !== targetId;
 
   // S3-007: Restore persisted Q&A history when opening or switching targets
   useEffect(() => {
     let active = true;
-    setHistory([]);
-    setError("");
-    setHistoryLoading(true);
 
     (async () => {
       try {
@@ -45,12 +52,12 @@ export default function ReviewQA({
         if (!response?.ok) return;
         const data = await response.json();
         if (active && Array.isArray(data)) {
-          setHistory(data);
+          setHistoryState({ targetId, entries: data });
         }
       } catch {
         // Ignore history fetch errors so user can still ask new questions
       } finally {
-        if (active) setHistoryLoading(false);
+        if (active) setLoadedTargetId(targetId);
       }
     })();
 
@@ -66,7 +73,7 @@ export default function ReviewQA({
     if (blockedReason || !trimmedQuestion) return;
 
     setLoading(true);
-    setError("");
+    setErrorState({ targetId, message: "" });
 
     try {
       const token = await getToken();
@@ -85,21 +92,24 @@ export default function ReviewQA({
       }
 
       const data = await response.json();
-      setHistory((prev) => [
-        ...prev,
-        {
-          id: data.id,
-          question: data.question ?? trimmedQuestion,
-          answer: data.answer,
-          created_at: data.created_at,
-        },
-      ]);
+      setHistoryState((prev) => ({
+        targetId,
+        entries: [
+          ...(prev.targetId === targetId ? prev.entries : []),
+          {
+            id: data.id,
+            question: data.question ?? trimmedQuestion,
+            answer: data.answer,
+            created_at: data.created_at,
+          },
+        ],
+      }));
       setQuestion("");
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        setErrorState({ targetId, message: err.message });
       } else {
-        setError(String(err));
+        setErrorState({ targetId, message: String(err) });
       }
     } finally {
       setLoading(false);
@@ -111,7 +121,7 @@ export default function ReviewQA({
     if (clearing || history.length === 0) return;
 
     setClearing(true);
-    setError("");
+    setErrorState({ targetId, message: "" });
 
     try {
       const token = await getToken();
@@ -126,12 +136,12 @@ export default function ReviewQA({
         throw new Error("Failed to clear Q&A history. Please try again.");
       }
 
-      setHistory([]);
+      setHistoryState({ targetId, entries: [] });
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        setErrorState({ targetId, message: err.message });
       } else {
-        setError(String(err));
+        setErrorState({ targetId, message: String(err) });
       }
     } finally {
       setClearing(false);
@@ -140,19 +150,7 @@ export default function ReviewQA({
 
   return (
     <div className="p-4 mt-6 border rounded-lg bg-zinc-900 border-zinc-800 shadow-sm text-zinc-100">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-lg font-semibold text-zinc-100">Ask ReviewLens AI</h3>
-        {history.length > 0 && (
-          <button
-            type="button"
-            onClick={handleClearHistory}
-            disabled={clearing || loading}
-            className="text-xs px-3 py-1.5 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-50 transition-colors"
-          >
-            {clearing ? "Clearing..." : "Clear Q&A History"}
-          </button>
-        )}
-      </div>
+      <h3 className="text-lg font-semibold mb-2 text-zinc-100">Ask ReviewLens AI</h3>
 
       {/* S2-017: show which target the questions are about */}
       {targetName && (
@@ -194,6 +192,16 @@ export default function ReviewQA({
 
       {history.length > 0 && (
         <div className="space-y-3 mt-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              disabled={clearing || loading}
+              className="text-xs px-3 py-1.5 rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-50 transition-colors"
+            >
+              {clearing ? "Clearing..." : "Clear Q&A History"}
+            </button>
+          </div>
           {history.map((entry, idx) => (
             <div key={entry.id ?? idx} className="bg-zinc-950 p-4 rounded-md border border-zinc-800 space-y-2">
               <p className="text-sm font-medium text-blue-400">Q: {entry.question}</p>
