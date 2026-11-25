@@ -1,16 +1,16 @@
 {
   "ExpandedNodes": [
     "",
+    "\\.github",
+    "\\.github\\workflows",
+    "\\Back_End",
+    "\\Back_End\\app",
+    "\\Back_End\\evals",
+    "\\Back_End\\tests",
     "\\Front_End",
     "\\Front_End\\clerk-nextjs",
-    "\\Front_End\\clerk-nextjs\\app",
-    "\\Front_End\\clerk-nextjs\\app\\home",
-    "\\Front_End\\clerk-nextjs\\app\\targets",
-    "\\Front_End\\clerk-nextjs\\app\\targets\\[id]",
-    "\\Front_End\\clerk-nextjs\\components",
-    "\\Front_End\\clerk-nextjs\\components\\ui",
     "\\Front_End\\clerk-nextjs\\lib"
   ],
-  "SelectedNode": "\\Front_End\\clerk-nextjs\\app\\favicon.ico",
+  "SelectedNode": "\\Back_End\\tests\\test_qa_harness.py",
   "PreviewInSolutionExplorer": false
 }

@@ -1,0 +1,24 @@
+# Secrets and local settings must never be copied into the image.
+.env
+.env.*
+!.env.example
+
+# Python and tooling files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Not needed to run the app
+tests/
+evals/
+deploy/
+Dockerfile
+.dockerignore
+scope_guard_eval_output.txt
+.git/
