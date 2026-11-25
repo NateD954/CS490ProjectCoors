@@ -13,7 +13,7 @@ def getGoogleDataIdFromURL(url):
 
 
 def getGooglePlaceData(dataId):
-    apiKey = os.getenv("X-API-Key")
+    apiKey = os.getenv("OPENWEBNINJA_API_KEY") or os.getenv("X-API-Key")
     
     searchParams = {
         "business_id": dataId,

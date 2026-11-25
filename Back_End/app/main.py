@@ -17,6 +17,10 @@ from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ReviewLens Coors edition (/^-^)oæ—¥æ—¥o(|^0^|) Backend Fastest API")
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
     
 app.add_middleware(
     CORSMiddleware,
