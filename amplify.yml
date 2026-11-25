@@ -1,0 +1,21 @@
+version: 1
+applications:
+  - appRoot: Front_End/clerk-nextjs
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - pwd
+            - env | grep -e BACKEND_URL -e CLERK_SECRET_KEY -e NEXT_PUBLIC_ >> .env.production
+            - npm run build
+      artifacts:
+        baseDirectory: .next
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+          - .next/cache/**/*
