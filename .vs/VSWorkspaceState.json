@@ -6,11 +6,11 @@
     "\\Back_End",
     "\\Back_End\\app",
     "\\Back_End\\evals",
+    "\\Back_End\\services",
     "\\Back_End\\tests",
     "\\Front_End",
     "\\Front_End\\clerk-nextjs",
     "\\Front_End\\clerk-nextjs\\lib"
   ],
-  "SelectedNode": "\\Back_End\\tests\\test_qa_harness.py",
   "PreviewInSolutionExplorer": false
 }
