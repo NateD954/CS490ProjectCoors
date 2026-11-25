@@ -244,6 +244,7 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
         "not represented in the active dataset. "
         "When declining, briefly explain that ReviewLens only analyzes "
         "the active business's provided reviews."
+        "Respond in clean plain text only. Do not use markdown formatting such as asterisks (** or *), hashtags (#), or backticks."
     )
 
     apiKey = os.getenv("GEMINI_API_KEY")
