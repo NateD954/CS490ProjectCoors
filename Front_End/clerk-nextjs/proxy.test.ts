@@ -23,6 +23,11 @@ async function visit(path: string) {
 }
 
 describe("route protection", () => {
+  it.each(["/comparisons", "/comparisons/saved-id"])("protects saved comparisons at %s", async (path) => {
+    const auth = await visit(path);
+    expect(auth.protect).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["/home", "/home/anything"])("sends signed-out visitors away from %s", async (path) => {
     const auth = await visit(path);
 
