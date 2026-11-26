@@ -1,0 +1,46 @@
+name: Review refresh database tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review-refresh:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: reviewlens_refresh
+          POSTGRES_PASSWORD: test_refresh_password
+        options: >-
+          --health-cmd "pg_isready -U postgres -d reviewlens_refresh"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run migration and refresh regression checks
+        env:
+          REVIEWLENS_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec -i "$REVIEWLENS_POSTGRES_CONTAINER" psql -U postgres -d reviewlens_refresh -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE anon;
+          CREATE ROLE authenticated;
+          CREATE ROLE service_role BYPASSRLS;
+          SQL
+          for sql_file in \
+            Database/schema.sql \
+            Database/Migrations/002_target_review_summary.sql \
+            Database/Migrations/003_ingestion_skips.sql \
+            Database/Migrations/004_review_refresh.sql \
+            Database/tests/004_review_refresh.sql
+          do
+            docker exec -i "$REVIEWLENS_POSTGRES_CONTAINER" psql -U postgres -d reviewlens_refresh -v ON_ERROR_STOP=1 < "$sql_file"
+          done

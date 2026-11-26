@@ -152,6 +152,20 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
                     {target.ingestionStatus === "failed" && (
                         <p className="text-sm text-red-400">{target.ingestionMessage ?? "Ingestion failed. You can try again."}</p>
                     )}
+                    {target.currentIngestionAt && (
+                        <p className="text-sm text-zinc-400">
+                            Last successful ingestion: {new Date(target.currentIngestionAt).toLocaleString()}
+                        </p>
+                    )}
+                    {target.currentIngestionId && (
+                        <p className="text-sm text-zinc-400">
+                            {target.ingestionStatus === "failed"
+                                ? "The refresh failed. Your saved reviews are still available."
+                                : busy
+                                    ? "Refreshing reviews. Your saved reviews are still available."
+                                    : "Showing all saved reviews, including reviews kept from earlier runs."}
+                        </p>
+                    )}
                     {summary ? (
                         <dl className="grid gap-4 border-t border-zinc-800 pt-4 sm:grid-cols-3">
                             <Detail label="Stored reviews">{summary.count}</Detail>
@@ -177,7 +191,7 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
                     </div>
                     <ExportReviewsButton target={target} />
                 </div>
-                <ReviewList key={`${target.ingestionStatus}-${ingestionRuns}`} targetId={target.id} />
+                <ReviewList key={`${target.id}-${target.currentIngestionId ?? ingestionRuns}`} targetId={target.id} />
             </section>
         </div>
     );

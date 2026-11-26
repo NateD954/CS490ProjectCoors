@@ -1,5 +1,6 @@
 import pytest
 from app import main
+from conftest import refreshRpc
 
 URL = "https://www.google.com/maps/place/Chipotle/data=!1s0x89c2fa2bfb0d27d5:0xcceef158b20fbf10"
 
@@ -54,6 +55,9 @@ class FakeClient:
     def table(self, name):
         return FakeQuery(self.tables[name])
 
+    def rpc(self, name, params):
+        return refreshRpc(self, name, params)
+
 
 @pytest.fixture
 def client(monkeypatch):
@@ -81,7 +85,6 @@ def client(monkeypatch):
 def test_owner_can_start_ingestion(client, monkeypatch):
     # Control test: proves the setup works, so the denial below is really about ownership.
     monkeypatch.setattr(main, "getGooglePlaceData", lambda dataId: {"reviews": []})
-    monkeypatch.setattr(main, "saveReviews", lambda rows: None)
 
     result = main.ingestTarget("target-A", "user_A")
 
@@ -93,7 +96,7 @@ def test_another_user_cannot_start_ingestion(client, monkeypatch):
     providerCalls = []
     saveCalls = []
     monkeypatch.setattr(main, "getGooglePlaceData", lambda dataId: providerCalls.append(dataId) or {"reviews": []})
-    monkeypatch.setattr(main, "saveReviews", lambda rows: saveCalls.append(rows))
+    monkeypatch.setattr(main, "completeIngestion", lambda *args: saveCalls.append(args))
 
     with pytest.raises(main.HTTPException) as err:
         main.ingestTarget("target-A", "user_B")

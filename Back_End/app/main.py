@@ -18,6 +18,7 @@ from app.db import supabaseClient
 from app.auth import getCurrentUserId
 from app.target_repository import getReviewSummary, saveTarget, listTargetsForOwner
 from app.analysis_export import analysisFileName, buildAnalysisMarkdown
+from app.review_refresh import IngestionBusy, beginIngestion, completeIngestion, failIngestion
 from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, parseReviews
 
 logger = logging.getLogger(__name__)
@@ -59,15 +60,6 @@ class IngestionInputError(ValueError):
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent"
 GEMINI_TIMEOUT_SECONDS = 45
 
-def saveReviews(rows: list) -> None:
-    for attempt in range(2):
-        try:
-            supabaseClient.table("reviews").upsert(rows, on_conflict="analysis_target_id,google_review_id").execute()
-            return
-        except Exception:
-            if attempt == 1:
-                raise
-
 JOB_STATUS_TO_UI = {"pending": "in_progress", "running": "in_progress", "completed": "completed", "failed": "failed"}
 STALE_JOB_AFTER = timedelta(minutes=10)
 
@@ -77,7 +69,7 @@ def withIngestionStatus(targets: list) -> list:
     ids = [t["id"] for t in targets]
     jobs = (
         supabaseClient.table("ingestion_jobs")
-        .select("analysis_target_id,status,error_message,created_at,reviews_skipped")
+        .select("id,analysis_target_id,status,error_message,created_at,started_at,reviews_skipped")
         .in_("analysis_target_id", ids)
         .order("created_at", desc=True)
         .execute()
@@ -97,12 +89,13 @@ def withIngestionStatus(targets: list) -> list:
             if state == "completed" and skipped:
                 state = "partial"
             elif state == "in_progress":
-                started = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
+                started = datetime.fromisoformat((job.get("started_at") or job["created_at"]).replace("Z", "+00:00"))
                 if datetime.now(timezone.utc) - started > STALE_JOB_AFTER:
                     state, error = "failed", "Ingestion did not finish. You can try again."
         t["ingestion_status"] = state
         t["ingestion_error"] = error
         t["ingestion_skipped"] = skipped
+        t["ingestion_id"] = job.get("id") if job else None
     return targets
 
 def isGoogleUrl(url: str) -> bool:
@@ -267,11 +260,13 @@ def exportTargetAnalysis(targetId: str, userId: str = Depends(getCurrentUserId))
 def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
     target = verifyTargetOwnership(targetId, userId)
 
-    job = supabaseClient.table("ingestion_jobs").insert({
-        "analysis_target_id": targetId,
-        "status": "running",
-        "started_at": nowIso()
-    }).execute().data[0]
+    try:
+        job = beginIngestion(supabaseClient, targetId)
+    except IngestionBusy as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+    except Exception as error:
+        logger.warning("Could not start ingestion: %s", type(error).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not start ingestion. Please try again.")
 
     skipped = None
     try:
@@ -292,31 +287,32 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
             }
             for r in reviews
         ]
-        if rows:
-            saveReviews(rows)
-
-        result = {"status": "completed", "reviews_ingested": len(rows)}
+        return completeIngestion(supabaseClient, job, rows, skipped)
     except IngestionInputError as e:
-        result = {"status": "failed", "error_message": str(e)}
+        message = str(e)
     except Exception as e:
-        detail = "" if isinstance(e, requests.RequestException) else e
-        logger.warning("Ingestion failed for target %s: %s: %s", targetId, type(e).__name__, detail)
-        result = {
-            "status": "failed",
-            "error_message": "Could not fetch reviews from the review provider. Please try again.",
-        }
+        logger.warning("Ingestion failed for target %s: %s", targetId, type(e).__name__)
+        message = "Could not fetch reviews from the review provider. Please try again."
 
-    result.update(reviews_skipped=skipped, completed_at=nowIso())
-    updatedJob = supabaseClient.table("ingestion_jobs").update(result).eq("id", job["id"]).execute().data[0]
-    if updatedJob["status"] == "failed":
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=updatedJob["error_message"])
-    return updatedJob
+    try:
+        updatedJob = failIngestion(supabaseClient, job, message, skipped)
+    except Exception as error:
+        logger.warning("Could not confirm ingestion state: %s", type(error).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not confirm ingestion status. Reload the target to check the latest run.")
+    if updatedJob["status"] == "completed":
+        return updatedJob
+    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=updatedJob.get("error_message") or message)
 
 @app.post("/api/targets/{targetId}/ask")
 def ask_review_question(targetId: str, request: QuestionRequest, userId: str = Depends(getCurrentUserId)):
     target = verifyTargetOwnership(targetId, userId)
 
-    res = supabaseClient.table("reviews").select("review_text").eq("analysis_target_id", targetId).execute()
+    res = (
+        supabaseClient.table("reviews").select("review_text")
+        .eq("analysis_target_id", targetId)
+        .order("ingested_at", desc=True).order("id")
+        .execute()
+    )
     reviews_data = res.data
 
     if not reviews_data:

@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from app import main
 from services import google_reviews
+from conftest import refreshRpc
 
 CAFE_ID = "0x1111111111111111:0xaaaaaaaaaaaaaaaa"
 BAKERY_ID = "0x2222222222222222:0xbbbbbbbbbbbbbbbb"
@@ -133,6 +134,9 @@ class FakeDatabase:
         return FakeQuery(self, name)
 
     def rpc(self, name, params):
+        if name in ("begin_review_ingestion", "complete_review_ingestion"):
+            self.accessed.append(name)
+            return refreshRpc(self, name, params)
         assert name == "get_target_review_summary"
         self.accessed.append(name)
         ratings = [

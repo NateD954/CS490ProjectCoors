@@ -1,7 +1,7 @@
 import os
 import requests
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -23,7 +23,8 @@ def getGooglePlaceData(dataId):
     response = requests.get(
         "https://api.openwebninja.com/local-business-data/business-reviews-v2",
         headers={"x-api-key": apiKey},
-        params=searchParams
+        params=searchParams,
+        timeout=45
     )
 
     response.raise_for_status()
@@ -37,7 +38,7 @@ def getGooglePlaceData(dataId):
 
 def parseReviews(data):
     """Return usable reviews and the number of source records skipped."""
-    sourceReviews = data.get("reviews", [])
+    sourceReviews = data.get("reviews") if isinstance(data, dict) else None
     if not isinstance(sourceReviews, list):
         raise TypeError("Expected a list of reviews from the review provider.")
 
@@ -57,10 +58,17 @@ def parseReviews(data):
         if isinstance(rating, bool) or rating not in (1, 2, 3, 4, 5):
             continue
         if reviewId is not None:
-            if not isinstance(reviewId, str) or "\x00" in reviewId or reviewId in seenIds:
+            if not isinstance(reviewId, str) or "\x00" in reviewId:
+                continue
+            reviewId = reviewId.strip() or None
+            if reviewId is not None and reviewId in seenIds:
                 continue
         try:
-            date = datetime.fromisoformat(date).isoformat() if date is not None else None
+            if date is not None:
+                parsed = datetime.fromisoformat(date)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                date = parsed.astimezone(timezone.utc).isoformat()
         except (TypeError, ValueError):
             continue
 

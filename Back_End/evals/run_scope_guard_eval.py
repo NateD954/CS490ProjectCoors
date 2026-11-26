@@ -40,6 +40,9 @@ class _Query:
     def select(self, *_):
         return self
 
+    def order(self, *_, **__):
+        return self
+
     def eq(self, column, value):
         self.filters.append(lambda r: r.get(column) == value)
         return self

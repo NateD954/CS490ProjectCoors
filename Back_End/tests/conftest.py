@@ -28,6 +28,9 @@ How to use `model`
 """
 
 import json as jsonlib
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -36,6 +39,65 @@ import requests
 API_KEY = "test-key"
 # Text that appears only inside provider errors. It must never reach a user.
 SECRET_DETAIL = "internal-secret-detail"
+
+
+def refreshRpc(db, name, params):
+    def execute():
+        snapshot = deepcopy(db.tables)
+        try:
+            targetId = params["p_target_id"]
+            target = next(t for t in db.tables["analysis_targets"] if t["id"] == targetId)
+            if name == "begin_review_ingestion":
+                for job in db.tables["ingestion_jobs"]:
+                    if job["analysis_target_id"] != targetId or job["status"] not in ("pending", "running"):
+                        continue
+                    started = datetime.fromisoformat((job.get("started_at") or job["created_at"]).replace("Z", "+00:00"))
+                    if started < datetime.now(timezone.utc) - timedelta(minutes=10):
+                        job.update(status="failed", error_message="Ingestion did not finish. You can try again.")
+                    else:
+                        error = RuntimeError("Already running")
+                        error.code = "55P03"
+                        raise error
+                return db.table("ingestion_jobs").insert({
+                    "analysis_target_id": targetId, "status": "running",
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "reviews_ingested": 0,
+                }).execute()
+
+            job = next(j for j in db.tables["ingestion_jobs"] if j["id"] == params["p_job_id"] and j["analysis_target_id"] == targetId)
+            if job["status"] == "completed":
+                return SimpleNamespace(data=[dict(job)])
+            if job["status"] != "running":
+                raise RuntimeError("Attempt is no longer active")
+            if getattr(db, "failPromotion", False):
+                raise RuntimeError("Promotion failed")
+            keys = set()
+            for row in params["p_reviews"]:
+                def key(r):
+                    sourceId = (r.get("google_review_id") or "").strip()
+                    date = r.get("reviewed_at")
+                    parsed = datetime.fromisoformat(date.replace("Z", "+00:00")) if date else None
+                    stamp = (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp() if parsed else None
+                    return ("source", sourceId) if sourceId else ("fingerprint", re.sub(r"\s+", " ", (r.get("review_text") or "").strip()).lower(), r["rating"], stamp)
+
+                identity = key(row)
+                if identity in keys:
+                    continue
+                keys.add(identity)
+                match = next((r for r in db.tables["reviews"] if r["analysis_target_id"] == targetId and key(r) == identity), None)
+                if match:
+                    match.update(row, ingested_at=datetime.now(timezone.utc).isoformat())
+                else:
+                    db.table("reviews").insert({**row, "ingested_at": datetime.now(timezone.utc).isoformat()}).execute()
+            job.update(status="completed", reviews_ingested=len(keys),
+                       reviews_skipped=params["p_skipped"] + len(params["p_reviews"]) - len(keys),
+                       completed_at=datetime.now(timezone.utc).isoformat(), error_message=None)
+            target.update(current_ingestion_id=job["id"], current_ingestion_at=job["completed_at"])
+            return SimpleNamespace(data=[dict(job)])
+        except Exception:
+            db.tables = snapshot
+            raise
+    return SimpleNamespace(execute=execute)
 
 
 def answerPayload(text):
@@ -188,6 +250,9 @@ class QaQuery:
         self.filters = []
 
     def select(self, *_):
+        return self
+
+    def order(self, *_, **__):
         return self
 
     def eq(self, column, value):

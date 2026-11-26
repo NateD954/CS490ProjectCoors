@@ -179,6 +179,22 @@ describe("getTarget", () => {
     expect(target?.skippedReviews).toBe(0);
   });
 
+  it("keeps the last successful dataset separate from a failed latest attempt", async () => {
+    routes(() => reply(row({
+      ingestion_status: "failed",
+      ingestion_error: "Provider down",
+      current_ingestion_id: "successful-job",
+      current_ingestion_at: "2026-11-25T12:00:00Z",
+      review_summary: { review_count: 10, average_rating: 4 },
+    })));
+
+    const target = await getTarget("t1");
+    expect(target?.ingestionStatus).toBe("failed");
+    expect(target?.currentIngestionId).toBe("successful-job");
+    expect(target?.currentIngestionAt).toBe("2026-11-25T12:00:00Z");
+    expect(target?.reviewSummary?.count).toBe(10);
+  });
+
   it.each([[404], [403]])("returns null when the server answers %i", async (status) => {
     routes(() => reply({ detail: "nope" }, status));
 
@@ -279,6 +295,12 @@ describe("startIngestion", () => {
     const err = await catchError(startIngestion("t1"));
 
     expect(err.message).toBe(PROVIDER_FAILED);
+  });
+
+  it("explains when another refresh is already running", async () => {
+    routes(() => reply({ detail: "Ingestion is already running for this target." }, 409));
+    const err = await catchError(startIngestion("t1"));
+    expect(err.message).toBe("Ingestion is already running for this target.");
   });
 
   it("reports a target that disappeared after the job ran", async () => {

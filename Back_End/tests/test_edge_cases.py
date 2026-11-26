@@ -10,6 +10,8 @@ import pytest
 import requests
 
 from app import main
+from app.review_refresh import completeIngestion
+from test_integration_flows import FakeDatabase as MiniDatabase
 from services import google_reviews
 from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData
 
@@ -20,63 +22,6 @@ PROVIDER_FAILED = "Could not fetch reviews from the review provider. Please try 
 
 
 # ---- a small in-memory database ----------------------------------------------
-
-
-class MiniQuery:
-    def __init__(self, db, name):
-        self.db = db
-        self.name = name
-        self.rows = db.tables[name]
-        self.mode = "select"
-        self.payload = None
-        self.filters = []
-        self.sort = None
-
-    def select(self, *_):
-        return self
-
-    def insert(self, row):
-        self.mode, self.payload = "insert", row
-        return self
-
-    def update(self, changes):
-        self.mode, self.payload = "update", changes
-        return self
-
-    def eq(self, column, value):
-        self.filters.append(lambda r: r.get(column) == value)
-        return self
-
-    def in_(self, column, values):
-        self.filters.append(lambda r: r.get(column) in values)
-        return self
-
-    def order(self, column, desc=False, **_):
-        self.sort = (column, desc)
-        return self
-
-    def execute(self):
-        if self.mode == "insert":
-            saved = {"id": f"{self.name}-{len(self.rows) + 1}", **self.payload}
-            self.rows.append(saved)
-            data = [saved]
-        else:
-            data = [r for r in self.rows if all(f(r) for f in self.filters)]
-            if self.mode == "update":
-                for r in data:
-                    r.update(self.payload)
-            elif self.sort:
-                column, desc = self.sort
-                data = sorted(data, key=lambda r: r[column], reverse=desc)
-        return type("Result", (), {"data": [dict(r) for r in data]})()
-
-
-class MiniDatabase:
-    def __init__(self):
-        self.tables = {"analysis_targets": [], "ingestion_jobs": [], "reviews": []}
-
-    def table(self, name):
-        return MiniQuery(self, name)
 
 
 class FakeResponse:
@@ -177,10 +122,10 @@ def test_a_database_failure_while_saving_reviews_fails_the_job(db, monkeypatch):
         FakeResponse({"status": "OK", "data": {"reviews": [{"review_id": "r1", "rating": 5, "review_text": "Great"}]}}),
     )
 
-    def failToSave(rows):
+    def failToSave(*args):
         raise RuntimeError("database is down")
 
-    monkeypatch.setattr(main, "saveReviews", failToSave)
+    monkeypatch.setattr(main, "completeIngestion", failToSave)
 
     with pytest.raises(main.HTTPException) as err:
         main.ingestTarget("t1", "user_A")
@@ -200,18 +145,19 @@ class FlakyReviewsClient:
         self.outcomes = list(outcomes)
         self.saves = []
 
-    def table(self, name):
-        assert name == "reviews"
-        return self
-
-    def upsert(self, rows, on_conflict=None):
-        self.saves.append({"rows": rows, "on_conflict": on_conflict})
+    def rpc(self, name, params):
+        assert name == "complete_review_ingestion"
+        self.saves.append(params)
         return self
 
     def execute(self):
         outcome = self.outcomes.pop(0)
         if outcome:
             raise outcome
+        return type("Result", (), {"data": [{"id": "job-1", "status": "completed"}]})()
+
+
+JOB = {"id": "job-1", "analysis_target_id": "t1"}
 
 
 def test_saving_reviews_succeeds_on_the_second_try_after_a_dropped_connection(monkeypatch):
@@ -219,10 +165,10 @@ def test_saving_reviews_succeeds_on_the_second_try_after_a_dropped_connection(mo
     monkeypatch.setattr(main, "supabaseClient", client)
     rows = [{"analysis_target_id": "t1", "google_review_id": "r1"}]
 
-    main.saveReviews(rows)  # must not raise
+    completeIngestion(client, JOB, rows, 0)
 
     assert len(client.saves) == 2
-    assert client.saves[1]["rows"] == rows
+    assert client.saves[1]["p_reviews"] == rows
 
 
 def test_saving_reviews_gives_up_after_the_second_failure(monkeypatch):
@@ -230,18 +176,19 @@ def test_saving_reviews_gives_up_after_the_second_failure(monkeypatch):
     monkeypatch.setattr(main, "supabaseClient", client)
 
     with pytest.raises(ConnectionError, match="second"):
-        main.saveReviews([{"analysis_target_id": "t1", "google_review_id": "r1"}])
+        completeIngestion(client, JOB, [{"analysis_target_id": "t1", "google_review_id": "r1"}], 0)
 
     assert len(client.saves) == 2  # tried exactly twice
 
 
-def test_saving_reviews_updates_existing_ones_instead_of_duplicating(monkeypatch):
+def test_retry_uses_the_same_job_and_target(monkeypatch):
     client = FlakyReviewsClient([None])
     monkeypatch.setattr(main, "supabaseClient", client)
 
-    main.saveReviews([{"analysis_target_id": "t1", "google_review_id": "r1"}])
+    completeIngestion(client, JOB, [{"analysis_target_id": "t1", "google_review_id": "r1"}], 0)
 
-    assert client.saves[0]["on_conflict"] == "analysis_target_id,google_review_id"
+    assert client.saves[0]["p_job_id"] == "job-1"
+    assert client.saves[0]["p_target_id"] == "t1"
 
 
 # ---- ingestion status shown with a target ------------------------------------
