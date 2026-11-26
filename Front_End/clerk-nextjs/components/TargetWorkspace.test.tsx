@@ -14,7 +14,12 @@ const toast = vi.hoisted(() => ({
 }));
 
 vi.mock("./ui/Toast", () => ({ useToast: () => toast }));
-vi.mock("@/lib/targets-service", () => ({ getTarget: vi.fn(), startIngestion: vi.fn(), downloadReviewsCsv: vi.fn() }));
+vi.mock("@/lib/targets-service", () => ({
+  getTarget: vi.fn(),
+  startIngestion: vi.fn(),
+  downloadReviewsCsv: vi.fn(),
+  downloadAnalysisMarkdown: vi.fn(),
+}));
 
 // The review list has its own tests, so it is replaced with a stub here.
 vi.mock("./ReviewList", async () => {

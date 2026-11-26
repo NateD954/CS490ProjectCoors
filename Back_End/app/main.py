@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.db import supabaseClient
 from app.auth import getCurrentUserId
 from app.target_repository import getReviewSummary, saveTarget, listTargetsForOwner
+from app.analysis_export import analysisFileName, buildAnalysisMarkdown
 from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, parseReviews
 
 logger = logging.getLogger(__name__)
@@ -230,6 +231,30 @@ def exportTargetReviews(targetId: str, userId: str = Depends(getCurrentUserId)):
         content="\ufeff" + buffer.getvalue(),  # the marker makes Excel read accents correctly
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{exportFileName(target.get("business_name") or "")}"'},
+    )
+
+@app.get("/api/targets/{targetId}/export/markdown")
+def exportTargetAnalysis(targetId: str, userId: str = Depends(getCurrentUserId)):
+    """S3-018: the saved analysis (details, ingestion summary, Q&A history) as a Markdown file."""
+    # Ownership is checked first, so nothing else is read for a user who does not own the target.
+    target = withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
+    summary = getReviewSummary(supabaseClient, targetId)
+    history = (
+        supabaseClient.table("qa_history")
+        .select("id,question,answer,created_at")
+        .eq("analysis_target_id", targetId)
+        .order("created_at", desc=False)
+        .order("id", desc=False)
+        .execute()
+        .data
+        or []
+    )
+
+    markdown = buildAnalysisMarkdown(target, summary, history, datetime.now(timezone.utc))
+    return Response(
+        content=markdown,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{analysisFileName(target.get("business_name") or "")}"'},
     )
 
 @app.post("/api/targets/{targetId}/ingest")
