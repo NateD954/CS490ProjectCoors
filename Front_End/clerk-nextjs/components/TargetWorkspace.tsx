@@ -10,6 +10,7 @@ import { Spinner } from "./ui/Spinner";
 import { StatusBadge } from "./ui/StatusBadge";
 import { ReviewList } from "./ReviewList";
 import { useToast } from "./ui/Toast";
+import { ExportReviewsButton } from "./ExportReviewsButton";
 
 type LoadState = "loading" | "ready" | "missing" | "error";
 
@@ -161,8 +162,10 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
       </Section>
 
       <Section title="Reviews" hint="Newest first.">
-        {/* The key makes the list reload whenever ingestion runs or its state changes. */}
-        <ReviewList key={`${target.ingestionStatus}-${ingestionRuns}`} targetId={target.id} />
+          <div className="flex justify-end">
+              <ExportReviewsButton target={target} />
+          </div>
+          <ReviewList key={`${target.ingestionStatus}-${ingestionRuns}`} targetId={target.id} />
       </Section>
     </div>
   );
