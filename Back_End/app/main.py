@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import UUID
 
 from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +45,11 @@ MAX_QUESTION_LENGTH = 1000  # keep in step with the limit in the frontend's Revi
 
 class QuestionRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
+
+class ComparisonCreateRequest(BaseModel):
+    name: str
+    targetAId: UUID
+    targetBId: UUID
 
 
 class IngestionInputError(ValueError):
@@ -404,3 +410,23 @@ def clear_qa_history(targetId: str, userId: str = Depends(getCurrentUserId)):
     verifyTargetOwnership(targetId, userId)
     supabaseClient.table("qa_history").delete().eq("analysis_target_id", targetId).execute()
     return None
+@app.post("/api/comparisons", status_code=status.HTTP_201_CREATED)
+def createComparison(body: ComparisonCreateRequest, userId: str = Depends(getCurrentUserId)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Enter a name for the comparison.")
+    if body.targetAId == body.targetBId:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose two different targets to compare.")
+
+    targetAId = str(body.targetAId)
+    targetBId = str(body.targetBId)
+    verifyTargetOwnership(targetAId, userId)
+    verifyTargetOwnership(targetBId, userId)
+
+    row = {
+        "owner_clerk_id": userId,
+        "name": name,
+        "target_a_id": targetAId,
+        "target_b_id": targetBId,
+    }
+    return supabaseClient.table("comparisons").insert(row).execute().data[0]
