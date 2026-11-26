@@ -118,3 +118,21 @@ ON public.ingestion_jobs(analysis_target_id);
 
 ALTER TABLE public.ingestion_jobs
 ENABLE ROW LEVEL SECURITY;
+
+-- ============================================
+-- 4. Comparisons
+-- ============================================
+
+create table public.comparisons (
+    id uuid primary key default gen_random_uuid(),
+    owner_clerk_id text not null,
+    name text not null,
+    target_a_id uuid references public.analysis_targets(id) on delete set null,
+    target_b_id uuid references public.analysis_targets(id) on delete set null,
+    created_at timestamptz not null default now(),
+    check (target_a_id <> target_b_id)
+);
+
+alter table public.comparisons enable row level security;
+
+grant select, insert, update, delete on public.comparisons to service_role;
