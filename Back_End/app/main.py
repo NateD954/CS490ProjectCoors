@@ -1,6 +1,10 @@
 import logging
 import requests
 import os
+import csv
+import io
+import re
+from fastapi.responses import Response
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -167,6 +171,66 @@ def getTargetReviews(
     if limit is not None:
         query = query.range(offset, offset + limit - 1)
     return query.execute().data
+
+EXPORT_PAGE_SIZE = 1000  # the database returns at most 1000 rows per request
+CSV_COLUMNS = ["source_review_id", "rating", "review_text", "reviewed_at", "target_name", "platform", "target_source_url"]
+
+
+def csvText(value) -> str:
+    """Text for one CSV cell. A leading = + - @ gets a quote so a spreadsheet cannot run it as a formula."""
+    if value is None:
+        return ""
+    text = str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
+def fetchAllReviews(targetId: str) -> list:
+    rows, offset = [], 0
+    while True:
+        page = (
+            supabaseClient.table("reviews")
+            .select("google_review_id,rating,review_text,reviewed_at")
+            .eq("analysis_target_id", targetId)
+            .order("reviewed_at", desc=True, nullsfirst=False)
+            .order("id")
+            .range(offset, offset + EXPORT_PAGE_SIZE - 1)
+            .execute()
+            .data
+        )
+        rows.extend(page)
+        if len(page) < EXPORT_PAGE_SIZE:
+            return rows
+        offset += EXPORT_PAGE_SIZE
+
+
+def exportFileName(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "target"
+    return f"reviewlens-{slug}-reviews.csv"
+
+
+@app.get("/api/targets/{targetId}/reviews/export")
+def exportTargetReviews(targetId: str, userId: str = Depends(getCurrentUserId)):
+    target = verifyTargetOwnership(targetId, userId)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(CSV_COLUMNS)
+    for r in fetchAllReviews(targetId):
+        writer.writerow([
+            csvText(r.get("google_review_id")),
+            "" if r.get("rating") is None else r["rating"],
+            csvText(r.get("review_text")),
+            csvText(r.get("reviewed_at")),
+            csvText(target.get("business_name")),
+            csvText(target.get("platform")),
+            csvText(target.get("source_url")),
+        ])
+
+    return Response(
+        content="\ufeff" + buffer.getvalue(),  # the marker makes Excel read accents correctly
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{exportFileName(target.get("business_name") or "")}"'},
+    )
 
 @app.post("/api/targets/{targetId}/ingest")
 def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):

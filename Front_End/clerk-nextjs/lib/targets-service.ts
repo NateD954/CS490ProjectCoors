@@ -200,3 +200,31 @@ export async function listReviews(
     hasMore: rows.length > limit,
   };
 }
+
+// ----- Export the stored reviews as a CSV file -----------------------------
+
+export function csvFileName(name: string, date: Date = new Date()): string {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "target";
+    return `reviewlens-${slug}-reviews-${date.toISOString().slice(0, 10)}.csv`;
+}
+
+// Downloads every stored review of a target as a CSV file. The backend builds the file
+// from the persisted reviews on each request, so it is always current.
+export async function downloadReviewsCsv(target: Pick<AnalysisTarget, "id" | "name">): Promise<void> {
+    let res: Response;
+    try {
+        res = await fetch(`${BASE}/targets/${encodeURIComponent(target.id)}/reviews/export`, { cache: "no-store" });
+    } catch {
+        throw new Error("Could not reach the server. Check your connection and try again.");
+    }
+    if (!res.ok) throw await toError(res);
+
+    const url = URL.createObjectURL(await res.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = csvFileName(target.name);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}

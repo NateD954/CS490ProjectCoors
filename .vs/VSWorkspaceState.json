@@ -10,7 +10,8 @@
     "\\Back_End\\tests",
     "\\Front_End",
     "\\Front_End\\clerk-nextjs",
-    "\\Front_End\\clerk-nextjs\\lib"
+    "\\Front_End\\clerk-nextjs\\components"
   ],
+  "SelectedNode": "\\Back_End\\app\\main.py",
   "PreviewInSolutionExplorer": false
 }
