@@ -32,7 +32,7 @@ def test_s3_006_and_s3_007_persist_and_restore_qa_history_per_target(monkeypatch
                     return q
                 tbl.select.return_value.eq.side_effect = eq_target
             elif name == "reviews":
-                tbl.select.return_value.eq.return_value.execute.return_value.data = [
+                tbl.select.return_value.eq.return_value.order.return_value.order.return_value.execute.return_value.data = [
                     {"review_text": "Great espresso and fast service."}
                 ]
             elif name == "qa_history":

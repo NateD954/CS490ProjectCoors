@@ -20,6 +20,8 @@ export type AnalysisTarget = {
   ingestionMessage?: string; // optional detail, e.g. a failure reason
   skippedReviews?: number; // latest ingestion job
   reviewSummary?: ReviewSummary;
+  currentIngestionId?: string;
+  currentIngestionAt?: string;
 };
 
 // What the user submits. Platform and owner are NOT part of this: the platform

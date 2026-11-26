@@ -1,49 +1,11 @@
 import pytest
 from app import main
-
-
-class FakeQuery:
-    def __init__(self, rows):
-        self.rows = rows
-        self.row = None
-        self.jobId = None
-
-    def insert(self, row):
-        self.row = {"id": "job-1", **row}
-        return self
-
-    def update(self, row):
-        self.row = row
-        return self
-
-    def eq(self, column, value):
-        self.jobId = value
-        return self
-
-    def execute(self):
-        if self.jobId is None:
-            self.rows.append(self.row)
-            saved = self.rows[-1]
-        else:
-            saved = next(row for row in self.rows if row["id"] == self.jobId)
-            saved.update(self.row)
-
-        class Result:
-            data = [saved]
-
-        return Result()
-
-
-class FakeClient:
-    def __init__(self):
-        self.jobs = []
-
-    def table(self, name):
-        return FakeQuery(self.jobs)
+from test_integration_flows import FakeDatabase
 
 
 def setupIngestion(monkeypatch):
-    client = FakeClient()
+    client = FakeDatabase()
+    client.tables["analysis_targets"].append({"id": "target-1"})
 
     monkeypatch.setattr(main, "supabaseClient", client)
     monkeypatch.setattr(
@@ -56,7 +18,6 @@ def setupIngestion(monkeypatch):
         "getGoogleDataIdFromURL",
         lambda url: "fake-data-id"
     )
-    monkeypatch.setattr(main, "saveReviews", lambda rows: None)
 
     return client
 
@@ -81,7 +42,7 @@ def test_ingestion_completes(monkeypatch):
 
     assert result["status"] == "completed"
     assert result["reviews_ingested"] == 1
-    assert client.jobs[0]["status"] == "completed"
+    assert client.tables["ingestion_jobs"][0]["status"] == "completed"
 
 
 def test_ingestion_fails(monkeypatch):
@@ -95,4 +56,4 @@ def test_ingestion_fails(monkeypatch):
     with pytest.raises(main.HTTPException):
         main.ingestTarget("target-1", "user_A")
 
-    assert client.jobs[0]["status"] == "failed"
+    assert client.tables["ingestion_jobs"][0]["status"] == "failed"
