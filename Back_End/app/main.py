@@ -7,15 +7,19 @@ from fastapi.responses import Response
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import UUID
 
 from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from httpx import HTTPError
+from postgrest.exceptions import APIError
 
 from app.db import supabaseClient
 from app.auth import getCurrentUserId
 from app.target_repository import getReviewSummary, saveTarget, listTargetsForOwner
 from app.analysis_export import analysisFileName, buildAnalysisMarkdown, slugify
+from app.review_refresh import IngestionBusy, beginIngestion, completeIngestion, failIngestion
 from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, parseReviews
 
 logger = logging.getLogger(__name__)
@@ -44,6 +48,11 @@ MAX_QUESTION_LENGTH = 1000  # keep in step with the limit in the frontend's Revi
 class QuestionRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
 
+class ComparisonCreateRequest(BaseModel):
+    name: str
+    targetAId: UUID
+    targetBId: UUID
+
 
 class IngestionInputError(ValueError):
     """An ingestion failure with a message safe to show to the user."""
@@ -51,15 +60,6 @@ class IngestionInputError(ValueError):
 # The key is sent in a header, never in the URL, so it cannot end up in logs or error text.
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent"
 GEMINI_TIMEOUT_SECONDS = 45
-
-def saveReviews(rows: list) -> None:
-    for attempt in range(2):
-        try:
-            supabaseClient.table("reviews").upsert(rows, on_conflict="analysis_target_id,google_review_id").execute()
-            return
-        except Exception:
-            if attempt == 1:
-                raise
 
 JOB_STATUS_TO_UI = {"pending": "in_progress", "running": "in_progress", "completed": "completed", "failed": "failed"}
 STALE_JOB_AFTER = timedelta(minutes=10)
@@ -70,7 +70,7 @@ def withIngestionStatus(targets: list) -> list:
     ids = [t["id"] for t in targets]
     jobs = (
         supabaseClient.table("ingestion_jobs")
-        .select("analysis_target_id,status,error_message,created_at,reviews_skipped")
+        .select("id,analysis_target_id,status,error_message,created_at,started_at,reviews_skipped")
         .in_("analysis_target_id", ids)
         .order("created_at", desc=True)
         .execute()
@@ -90,12 +90,13 @@ def withIngestionStatus(targets: list) -> list:
             if state == "completed" and skipped:
                 state = "partial"
             elif state == "in_progress":
-                started = datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
+                started = datetime.fromisoformat((job.get("started_at") or job["created_at"]).replace("Z", "+00:00"))
                 if datetime.now(timezone.utc) - started > STALE_JOB_AFTER:
                     state, error = "failed", "Ingestion did not finish. You can try again."
         t["ingestion_status"] = state
         t["ingestion_error"] = error
         t["ingestion_skipped"] = skipped
+        t["ingestion_id"] = job.get("id") if job else None
     return targets
 
 def isGoogleUrl(url: str) -> bool:
@@ -265,11 +266,13 @@ def exportTargetAnalysis(targetId: str, userId: str = Depends(getCurrentUserId))
 def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
     target = verifyTargetOwnership(targetId, userId)
 
-    job = supabaseClient.table("ingestion_jobs").insert({
-        "analysis_target_id": targetId,
-        "status": "running",
-        "started_at": nowIso()
-    }).execute().data[0]
+    try:
+        job = beginIngestion(supabaseClient, targetId)
+    except IngestionBusy as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+    except Exception as error:
+        logger.warning("Could not start ingestion: %s", type(error).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not start ingestion. Please try again.")
 
     skipped = None
     try:
@@ -290,31 +293,32 @@ def ingestTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
             }
             for r in reviews
         ]
-        if rows:
-            saveReviews(rows)
-
-        result = {"status": "completed", "reviews_ingested": len(rows)}
+        return completeIngestion(supabaseClient, job, rows, skipped)
     except IngestionInputError as e:
-        result = {"status": "failed", "error_message": str(e)}
+        message = str(e)
     except Exception as e:
-        detail = "" if isinstance(e, requests.RequestException) else e
-        logger.warning("Ingestion failed for target %s: %s: %s", targetId, type(e).__name__, detail)
-        result = {
-            "status": "failed",
-            "error_message": "Could not fetch reviews from the review provider. Please try again.",
-        }
+        logger.warning("Ingestion failed for target %s: %s", targetId, type(e).__name__)
+        message = "Could not fetch reviews from the review provider. Please try again."
 
-    result.update(reviews_skipped=skipped, completed_at=nowIso())
-    updatedJob = supabaseClient.table("ingestion_jobs").update(result).eq("id", job["id"]).execute().data[0]
-    if updatedJob["status"] == "failed":
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=updatedJob["error_message"])
-    return updatedJob
+    try:
+        updatedJob = failIngestion(supabaseClient, job, message, skipped)
+    except Exception as error:
+        logger.warning("Could not confirm ingestion state: %s", type(error).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not confirm ingestion status. Reload the target to check the latest run.")
+    if updatedJob["status"] == "completed":
+        return updatedJob
+    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=updatedJob.get("error_message") or message)
 
 @app.post("/api/targets/{targetId}/ask")
 def ask_review_question(targetId: str, request: QuestionRequest, userId: str = Depends(getCurrentUserId)):
     target = verifyTargetOwnership(targetId, userId)
 
-    res = supabaseClient.table("reviews").select("review_text").eq("analysis_target_id", targetId).execute()
+    res = (
+        supabaseClient.table("reviews").select("review_text")
+        .eq("analysis_target_id", targetId)
+        .order("ingested_at", desc=True).order("id")
+        .execute()
+    )
     reviews_data = res.data
 
     if not reviews_data:
@@ -408,3 +412,104 @@ def clear_qa_history(targetId: str, userId: str = Depends(getCurrentUserId)):
     verifyTargetOwnership(targetId, userId)
     supabaseClient.table("qa_history").delete().eq("analysis_target_id", targetId).execute()
     return None
+@app.post("/api/comparisons", status_code=status.HTTP_201_CREATED)
+def createComparison(body: ComparisonCreateRequest, userId: str = Depends(getCurrentUserId)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Enter a name for the comparison.")
+    if body.targetAId == body.targetBId:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose two different targets to compare.")
+
+    targetAId = str(body.targetAId)
+    targetBId = str(body.targetBId)
+    verifyTargetOwnership(targetAId, userId)
+    verifyTargetOwnership(targetBId, userId)
+
+    row = {
+        "owner_clerk_id": userId,
+        "name": name,
+        "target_a_id": targetAId,
+        "target_b_id": targetBId,
+    }
+    return supabaseClient.table("comparisons").insert(row).execute().data[0]
+
+
+def verifyComparisonOwnership(comparisonId: str, userId: str) -> dict:
+    rows = supabaseClient.table("comparisons").select("*").eq("id", comparisonId).execute().data
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comparison not found.")
+    if rows[0]["owner_clerk_id"] != userId:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this comparison.")
+    return rows[0]
+
+
+def comparisonDataset(targetId: Optional[str], userId: str) -> dict:
+    unavailable = {"id": targetId, "unavailable": True, "reason": "unavailable"}
+    if targetId is None:
+        return unavailable
+    try:
+        target = withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
+        summary = getReviewSummary(supabaseClient, targetId)
+        reviews = (
+            supabaseClient.table("reviews")
+            .select("id,rating,review_text,reviewed_at")
+            .eq("analysis_target_id", targetId)
+            .order("reviewed_at", desc=True, nullsfirst=False)
+            .order("id")
+            .limit(3)
+            .execute().data
+        )
+        return {
+            "id": targetId,
+            "unavailable": False,
+            "business_name": target["business_name"],
+            "platform": target["platform"],
+            "source_url": target["source_url"],
+            "review_summary": summary,
+            "ingestion_status": target["ingestion_status"],
+            "ingestion_error": target["ingestion_error"],
+            "ingestion_skipped": target["ingestion_skipped"],
+            "sample_reviews": reviews,
+        }
+    except HTTPException as error:
+        if error.status_code not in (403, 404):
+            raise
+        # saved links still need an ownership check
+        return unavailable
+    except (APIError, HTTPError) as error:
+        logger.warning("Comparison dataset could not be loaded: %s", type(error).__name__)
+        return {**unavailable, "reason": "temporarily_unavailable"}
+
+
+@app.get("/api/comparisons")
+def listComparisons(userId: str = Depends(getCurrentUserId)):
+    rows, offset = [], 0
+    while True:
+        page = (
+            supabaseClient.table("comparisons").select("*")
+            .eq("owner_clerk_id", userId)
+            .order("created_at", desc=True).order("id", desc=True)
+            .range(offset, offset + 999)
+            .execute().data
+        )
+        rows.extend(page)
+        if len(page) < 1000:
+            return rows
+        offset += 1000
+
+
+@app.get("/api/comparisons/{comparisonId}")
+def getComparison(comparisonId: UUID, userId: str = Depends(getCurrentUserId)):
+    comparison = verifyComparisonOwnership(str(comparisonId), userId)
+    return {
+        **comparison,
+        "target_a": comparisonDataset(comparison["target_a_id"], userId),
+        "target_b": comparisonDataset(comparison["target_b_id"], userId),
+    }
+
+
+@app.delete("/api/comparisons/{comparisonId}", status_code=status.HTTP_204_NO_CONTENT)
+def deleteComparison(comparisonId: UUID, userId: str = Depends(getCurrentUserId)):
+    verifyComparisonOwnership(str(comparisonId), userId)
+    supabaseClient.table("comparisons").delete().eq("id", str(comparisonId)).eq("owner_clerk_id", userId).execute()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

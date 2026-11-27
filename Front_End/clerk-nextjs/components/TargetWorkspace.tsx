@@ -132,43 +132,63 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
         </Card>
       </Section>
 
-      <Section title="Ingestion summary">
-        <Card className="space-y-4">
-          {/* S2-017: show which target this summary is for */}
-          <p className="text-sm text-zinc-400">
-            Active target: <span className="font-medium text-zinc-100">{target.name}</span>
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm text-zinc-400">Latest run</span>
-            <StatusBadge status={target.ingestionStatus} />
-          </div>
-          {target.ingestionStatus === "failed" && (
-            <p className="text-sm text-red-400">{target.ingestionMessage ?? "Ingestion failed. You can try again."}</p>
-          )}
-          {summary ? (
-            <dl className="grid gap-4 border-t border-zinc-800 pt-4 sm:grid-cols-3">
-              <Detail label="Stored reviews">{summary.count}</Detail>
-              <Detail label="Average rating">
-                {summary.averageRating === null ? "No ratings yet" : `${summary.averageRating.toFixed(2)} / 5`}
-              </Detail>
-              <Detail label="Skipped in latest run">{target.skippedReviews ?? "Not recorded"}</Detail>
-            </dl>
-          ) : (
-            <p className="text-sm text-zinc-400">Review totals are unavailable.</p>
-          )}
-          <Button onClick={handleStart} loading={busy} disabled={busy}>
-            {label}
-          </Button>
-        </Card>
-      </Section>
+            <Section title="Ingestion summary">
+                <Card className="space-y-4">
+                    {/* S2-017: show which target this summary is for */}
+                    <p className="text-sm text-zinc-400">
+                        Active target: <span className="font-medium text-zinc-100">{target.name}</span>
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-sm text-zinc-400">Latest run</span>
+                        <StatusBadge status={target.ingestionStatus} />
+                    </div>
+                    {target.ingestionStatus === "failed" && (
+                        <p className="text-sm text-red-400">{target.ingestionMessage ?? "Ingestion failed. You can try again."}</p>
+                    )}
+                    {target.currentIngestionAt && (
+                        <p className="text-sm text-zinc-400">
+                            Last successful ingestion: {new Date(target.currentIngestionAt).toLocaleString()}
+                        </p>
+                    )}
+                    {target.currentIngestionId && (
+                        <p className="text-sm text-zinc-400">
+                            {target.ingestionStatus === "failed"
+                                ? "The refresh failed. Your saved reviews are still available."
+                                : busy
+                                    ? "Refreshing reviews. Your saved reviews are still available."
+                                    : "Showing all saved reviews, including reviews kept from earlier runs."}
+                        </p>
+                    )}
+                    {summary ? (
+                        <dl className="grid gap-4 border-t border-zinc-800 pt-4 sm:grid-cols-3">
+                            <Detail label="Stored reviews">{summary.count}</Detail>
+                            <Detail label="Average rating">
+                                {summary.averageRating === null ? "No ratings yet" : `${summary.averageRating.toFixed(2)} / 5`}
+                            </Detail>
+                            <Detail label="Skipped in latest run">{target.skippedReviews ?? "Not recorded"}</Detail>
+                        </dl>
+                    ) : (
+                        <p className="text-sm text-zinc-400">Review totals are unavailable.</p>
+                    )}
+                    <Button onClick={handleStart} loading={busy} disabled={busy}>
+                        {label}
+                    </Button>
+                </Card>
+            </Section>
 
-      <Section title="Reviews" hint="Newest first.">
-          <div className="flex flex-wrap items-start justify-end gap-3">
-              <ExportAnalysisButton target={target} />
-              <ExportReviewsButton target={target} />
-          </div>
-          <ReviewList key={`${target.ingestionStatus}-${ingestionRuns}`} targetId={target.id} />
-      </Section>
-    </div>
-  );
+            <section className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h2 className="text-xl font-semibold text-zinc-100">Reviews</h2>
+                        <p className="text-sm text-zinc-400">Newest first.</p>
+                    </div>
+                    <div className="flex flex-wrap items-start gap-3">
+                        <ExportAnalysisButton target={target} />
+                        <ExportReviewsButton target={target} />
+                    </div>
+                </div>
+                <ReviewList key={`${target.id}-${target.currentIngestionId ?? ingestionRuns}`} targetId={target.id} />
+            </section>
+        </div>
+    );
 }
