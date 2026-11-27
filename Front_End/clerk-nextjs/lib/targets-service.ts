@@ -80,6 +80,8 @@ type TargetRow = {
   ingestion_error?: string | null;
   ingestion_skipped?: number | null;
   review_summary?: { review_count: number; average_rating: number | null };
+  current_ingestion_id?: string | null;
+  current_ingestion_at?: string | null;
 };
 
 function toTarget(row: TargetRow): AnalysisTarget {
@@ -92,6 +94,8 @@ function toTarget(row: TargetRow): AnalysisTarget {
     ingestionStatus: row.ingestion_status ?? "not_started",
     ingestionMessage: row.ingestion_error ?? undefined,
     skippedReviews: row.ingestion_skipped ?? undefined,
+    currentIngestionId: row.current_ingestion_id ?? undefined,
+    currentIngestionAt: row.current_ingestion_at ?? undefined,
     reviewSummary: row.review_summary && {
       count: row.review_summary.review_count,
       averageRating: row.review_summary.average_rating,

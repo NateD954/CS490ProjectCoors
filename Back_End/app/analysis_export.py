@@ -108,6 +108,8 @@ def buildAnalysisMarkdown(target: dict, summary: dict, history: list, exportedAt
         f"- **Average rating:** {'No ratings yet' if average is None else f'{float(average):.2f} / 5'}",
         f"- **Skipped in latest run:** {NOT_RECORDED if skipped is None else skipped}",
     ]
+    if target.get("current_ingestion_at"):
+        lines.append(f"- **Last successful ingestion:** {formatTimestamp(target['current_ingestion_at'])}")
     if target.get("ingestion_status") == "failed" and target.get("ingestion_error"):
         lines.append(f"- **Error:** {inlineText(target['ingestion_error'])}")
 

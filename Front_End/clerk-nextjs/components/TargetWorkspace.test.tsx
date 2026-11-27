@@ -125,6 +125,49 @@ describe("TargetWorkspace: loading the target", () => {
 });
 
 describe("TargetWorkspace: ingestion", () => {
+  it("shows saved dataset details after a failed refresh and keeps review export available", async () => {
+    getTargetMock.mockResolvedValue(target({
+      ingestionStatus: "failed", ingestionMessage: "Provider down",
+      currentIngestionId: "last-good-job", currentIngestionAt: "2026-11-25T12:00:00Z",
+      reviewSummary: { count: 10, averageRating: 4.5 },
+    }));
+
+    render(<TargetWorkspace id="t1" />);
+
+    expect(await screen.findByText("The refresh failed. Your saved reviews are still available.")).toBeTruthy();
+    expect(screen.getByText(/Last successful ingestion:/)).toBeTruthy();
+    expect(screen.getByText("Stored reviews").nextElementSibling?.textContent).toBe("10");
+    expect((screen.getByRole("button", { name: "Download CSV" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("reviews for t1")).toBeTruthy();
+  });
+
+  it("explains that saved reviews remain available while a refresh is running", async () => {
+    getTargetMock.mockResolvedValue(target({
+      ingestionStatus: "in_progress", currentIngestionId: "last-good-job",
+      reviewSummary: { count: 10, averageRating: 4.5 },
+    }));
+    render(<TargetWorkspace id="t1" />);
+    expect(await screen.findByText("Refreshing reviews. Your saved reviews are still available.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Download CSV" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("shows the promoted accumulated dataset after a refresh", async () => {
+    getTargetMock.mockResolvedValue(target({
+      ingestionStatus: "completed", currentIngestionId: "old-job",
+      reviewSummary: { count: 10, averageRating: 4 },
+    }));
+    startIngestionMock.mockResolvedValue(target({
+      ingestionStatus: "completed", currentIngestionId: "new-job",
+      currentIngestionAt: "2026-11-26T12:00:00Z",
+      reviewSummary: { count: 12, averageRating: 4.25 },
+    }));
+    render(<TargetWorkspace id="t1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run ingestion again" }));
+    await waitFor(() => expect(screen.getByText("Stored reviews").nextElementSibling?.textContent).toBe("12"));
+    expect(screen.getByText("Showing all saved reviews, including reviews kept from earlier runs.")).toBeTruthy();
+    expect(screen.getByText(/Last successful ingestion:/)).toBeTruthy();
+  });
+
   it("shows the failure reason and offers to run ingestion again", async () => {
     getTargetMock.mockResolvedValue(target({ ingestionStatus: "failed", ingestionMessage: "Provider down" }));
 
