@@ -35,6 +35,7 @@ function HomeContent() {
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 space-y-10 px-4 pb-16 pt-4 text-zinc-100">
+      <Link href="/comparisons" className="inline-block text-violet-300 underline">Compare targets / saved comparisons</Link>
       <Section title="Create a new target" hint="Add a business or location whose reviews you want to analyze.">
         <TargetForm onCreated={handleCreated} />
         {justCreated && (

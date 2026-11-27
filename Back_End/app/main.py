@@ -13,6 +13,8 @@ from uuid import UUID
 from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from httpx import HTTPError
+from postgrest.exceptions import APIError
 
 from app.db import supabaseClient
 from app.auth import getCurrentUserId
@@ -426,3 +428,84 @@ def createComparison(body: ComparisonCreateRequest, userId: str = Depends(getCur
         "target_b_id": targetBId,
     }
     return supabaseClient.table("comparisons").insert(row).execute().data[0]
+
+
+def verifyComparisonOwnership(comparisonId: str, userId: str) -> dict:
+    rows = supabaseClient.table("comparisons").select("*").eq("id", comparisonId).execute().data
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comparison not found.")
+    if rows[0]["owner_clerk_id"] != userId:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access to this comparison.")
+    return rows[0]
+
+
+def comparisonDataset(targetId: Optional[str], userId: str) -> dict:
+    unavailable = {"id": targetId, "unavailable": True, "reason": "unavailable"}
+    if targetId is None:
+        return unavailable
+    try:
+        target = withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
+        summary = getReviewSummary(supabaseClient, targetId)
+        reviews = (
+            supabaseClient.table("reviews")
+            .select("id,rating,review_text,reviewed_at")
+            .eq("analysis_target_id", targetId)
+            .order("reviewed_at", desc=True, nullsfirst=False)
+            .order("id")
+            .limit(3)
+            .execute().data
+        )
+        return {
+            "id": targetId,
+            "unavailable": False,
+            "business_name": target["business_name"],
+            "platform": target["platform"],
+            "source_url": target["source_url"],
+            "review_summary": summary,
+            "ingestion_status": target["ingestion_status"],
+            "ingestion_error": target["ingestion_error"],
+            "ingestion_skipped": target["ingestion_skipped"],
+            "sample_reviews": reviews,
+        }
+    except HTTPException as error:
+        if error.status_code not in (403, 404):
+            raise
+        # saved links still need an ownership check
+        return unavailable
+    except (APIError, HTTPError) as error:
+        logger.warning("Comparison dataset could not be loaded: %s", type(error).__name__)
+        return {**unavailable, "reason": "temporarily_unavailable"}
+
+
+@app.get("/api/comparisons")
+def listComparisons(userId: str = Depends(getCurrentUserId)):
+    rows, offset = [], 0
+    while True:
+        page = (
+            supabaseClient.table("comparisons").select("*")
+            .eq("owner_clerk_id", userId)
+            .order("created_at", desc=True).order("id", desc=True)
+            .range(offset, offset + 999)
+            .execute().data
+        )
+        rows.extend(page)
+        if len(page) < 1000:
+            return rows
+        offset += 1000
+
+
+@app.get("/api/comparisons/{comparisonId}")
+def getComparison(comparisonId: UUID, userId: str = Depends(getCurrentUserId)):
+    comparison = verifyComparisonOwnership(str(comparisonId), userId)
+    return {
+        **comparison,
+        "target_a": comparisonDataset(comparison["target_a_id"], userId),
+        "target_b": comparisonDataset(comparison["target_b_id"], userId),
+    }
+
+
+@app.delete("/api/comparisons/{comparisonId}", status_code=status.HTTP_204_NO_CONTENT)
+def deleteComparison(comparisonId: UUID, userId: str = Depends(getCurrentUserId)):
+    verifyComparisonOwnership(str(comparisonId), userId)
+    supabaseClient.table("comparisons").delete().eq("id", str(comparisonId)).eq("owner_clerk_id", userId).execute()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
