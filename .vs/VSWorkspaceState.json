@@ -12,6 +12,6 @@
     "\\Front_End\\clerk-nextjs",
     "\\Front_End\\clerk-nextjs\\components"
   ],
-  "SelectedNode": "\\Back_End\\app\\main.py",
+  "SelectedNode": "\\Front_End\\clerk-nextjs\\components\\TargetWorkspace.tsx",
   "PreviewInSolutionExplorer": false
 }

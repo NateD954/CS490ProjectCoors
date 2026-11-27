@@ -208,14 +208,26 @@ export async function listReviews(
 // ----- Export the stored reviews as a CSV file -----------------------------
 
 export function csvFileName(name: string, date: Date = new Date()): string {
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "target";
+    const slug = slugify(name);
     return `reviewlens-${slug}-reviews-${date.toISOString().slice(0, 10)}.csv`;
 }
 
 // ----- Export the saved analysis as a Markdown file ------------------------
 
+// "Café Mint — Plaza" becomes "cafe-mint-plaza", so file names stay readable outside ReviewLens.
+function slugify(name: string): string {
+    return (
+        name
+            .normalize("NFKD")
+            .replace(/[̀-ͯ]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "target"
+    );
+}
+
 export function markdownFileName(name: string, date: Date = new Date()): string {
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "target";
+    const slug = slugify(name);
     return `reviewlens-${slug}-analysis-${date.toISOString().slice(0, 10)}.md`;
 }
 

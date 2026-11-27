@@ -90,6 +90,10 @@ describe("csvFileName", () => {
     expect(csvFileName("Joe's Pizza & Pasta!", day)).toBe("reviewlens-joe-s-pizza-pasta-reviews-2026-11-24.csv");
   });
 
+  it("turns accents and dashes in the name into a clean, readable file name", () => {
+    expect(csvFileName("Café Blue Bottle — Mint Plaza", day)).toBe("reviewlens-cafe-blue-bottle-mint-plaza-reviews-2026-11-24.csv");
+  });
+
   it("falls back to a plain word when the name has no letters or digits", () => {
     expect(csvFileName("***", day)).toBe("reviewlens-target-reviews-2026-11-24.csv");
   });

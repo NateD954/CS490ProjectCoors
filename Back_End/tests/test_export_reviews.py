@@ -2,6 +2,7 @@
 
 import csv
 import io
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -9,7 +10,10 @@ from fastapi.testclient import TestClient
 
 from app import main
 
-COLUMNS = ["source_review_id", "rating", "review_text", "reviewed_at", "target_name", "platform", "target_source_url"]
+COLUMNS = [
+    "source_review_id", "rating", "review_text", "reviewed_at",
+    "target_name", "platform", "target_source_url", "exported_at",
+]
 URL = "https://www.google.com/maps/place/x/data=!1s0x1:0x2"
 
 
@@ -128,9 +132,24 @@ def test_the_owner_downloads_a_csv_of_the_stored_reviews_newest_first(exports):
     assert response.headers["content-type"].startswith("text/csv")
     rows = read_csv(response)
     assert rows[0] == COLUMNS
-    assert rows[1] == ["r2", "5", "New review", "2026-10-30T00:00:00+00:00", "Sample Cafe", "GOOGLE_MAPS", URL]
-    assert rows[2] == ["r1", "3", "Old review", "2026-10-01T00:00:00+00:00", "Sample Cafe", "GOOGLE_MAPS", URL]
+    assert rows[1][:-1] == ["r2", "5", "New review", "2026-10-30T00:00:00+00:00", "Sample Cafe", "GOOGLE_MAPS", URL]
+    assert rows[2][:-1] == ["r1", "3", "Old review", "2026-10-01T00:00:00+00:00", "Sample Cafe", "GOOGLE_MAPS", URL]
     assert len(rows) == 3
+
+
+def test_every_row_says_when_the_file_was_exported(exports):
+    target = exports.add_target()
+    exports.add_review(target, "r1", "One")
+    exports.add_review(target, "r2", "Two")
+    before = datetime.now(timezone.utc).replace(microsecond=0)
+
+    rows = read_csv(exports.export(target))
+
+    stamps = {row[-1] for row in rows[1:]}
+    assert len(stamps) == 1  # one export, one time, on every row
+    exportedAt = datetime.fromisoformat(stamps.pop())
+    assert exportedAt.utcoffset() == timedelta(0)  # shown in UTC
+    assert before <= exportedAt <= datetime.now(timezone.utc)
 
 
 def test_the_file_is_utf8_with_a_marker_so_excel_shows_accents_correctly(exports):
@@ -234,6 +253,14 @@ def test_the_download_name_is_a_safe_file_name(exports):
     response = exports.export(target)
 
     assert response.headers["content-disposition"] == 'attachment; filename="reviewlens-joe-s-pizza-pasta-reviews.csv"'
+
+
+def test_the_download_name_is_based_on_the_target_name_with_accents_and_dashes_tidied(exports):
+    target = exports.add_target(name="Café Blue Bottle — Mint Plaza")
+
+    response = exports.export(target)
+
+    assert response.headers["content-disposition"] == 'attachment; filename="reviewlens-cafe-blue-bottle-mint-plaza-reviews.csv"'
 
 
 # ---- who may export --------------------------------------------------------------
