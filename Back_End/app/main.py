@@ -3,7 +3,6 @@ import requests
 import os
 import csv
 import io
-import re
 from fastapi.responses import Response
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
@@ -16,7 +15,7 @@ from pydantic import BaseModel, Field
 from app.db import supabaseClient
 from app.auth import getCurrentUserId
 from app.target_repository import getReviewSummary, saveTarget, listTargetsForOwner
-from app.analysis_export import analysisFileName, buildAnalysisMarkdown
+from app.analysis_export import analysisFileName, buildAnalysisMarkdown, slugify
 from services.google_reviews import getGoogleDataIdFromURL, getGooglePlaceData, parseReviews
 
 logger = logging.getLogger(__name__)
@@ -174,7 +173,10 @@ def getTargetReviews(
     return query.execute().data
 
 EXPORT_PAGE_SIZE = 1000  # the database returns at most 1000 rows per request
-CSV_COLUMNS = ["source_review_id", "rating", "review_text", "reviewed_at", "target_name", "platform", "target_source_url"]
+CSV_COLUMNS = [
+    "source_review_id", "rating", "review_text", "reviewed_at",
+    "target_name", "platform", "target_source_url", "exported_at",
+]
 
 
 def csvText(value) -> str:
@@ -205,14 +207,15 @@ def fetchAllReviews(targetId: str) -> list:
 
 
 def exportFileName(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "target"
-    return f"reviewlens-{slug}-reviews.csv"
+    return f"reviewlens-{slugify(name)}-reviews.csv"
 
 
 @app.get("/api/targets/{targetId}/reviews/export")
 def exportTargetReviews(targetId: str, userId: str = Depends(getCurrentUserId)):
     target = verifyTargetOwnership(targetId, userId)
 
+    # S3-019: every row carries the time of the export, so a file found later can be dated.
+    exportedAt = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(CSV_COLUMNS)
@@ -225,6 +228,7 @@ def exportTargetReviews(targetId: str, userId: str = Depends(getCurrentUserId)):
             csvText(target.get("business_name")),
             csvText(target.get("platform")),
             csvText(target.get("source_url")),
+            exportedAt,
         ])
 
     return Response(

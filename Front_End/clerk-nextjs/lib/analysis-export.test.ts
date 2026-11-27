@@ -88,6 +88,10 @@ describe("markdownFileName", () => {
     expect(markdownFileName("Joe's Pizza & Pasta!", day)).toBe("reviewlens-joe-s-pizza-pasta-analysis-2026-11-26.md");
   });
 
+  it("turns accents and dashes in the name into a clean, readable file name", () => {
+    expect(markdownFileName("Café Blue Bottle — Mint Plaza", day)).toBe("reviewlens-cafe-blue-bottle-mint-plaza-analysis-2026-11-26.md");
+  });
+
   it("falls back to a plain word when the name has no letters or digits", () => {
     expect(markdownFileName("***", day)).toBe("reviewlens-target-analysis-2026-11-26.md");
   });

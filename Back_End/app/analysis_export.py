@@ -5,6 +5,7 @@ The route in main.py gathers the data and calls buildAnalysisMarkdown.
 """
 
 import re
+import unicodedata
 from datetime import datetime, timezone
 
 PLATFORM_LABELS = {"GOOGLE_MAPS": "Google Maps"}
@@ -60,9 +61,14 @@ def formatTimestamp(value) -> str:
     return parsed.strftime("%Y-%m-%d %H:%M UTC") if parsed else ""
 
 
+def slugify(name) -> str:
+    """A file-name-safe version of a business name: 'Café Mint — Plaza' becomes 'cafe-mint-plaza'."""
+    folded = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-") or "target"
+
+
 def analysisFileName(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") or "target"
-    return f"reviewlens-{slug}-analysis.md"
+    return f"reviewlens-{slugify(name)}-analysis.md"
 
 
 def _linkText(url) -> str:

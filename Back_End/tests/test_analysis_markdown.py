@@ -47,6 +47,7 @@ def test_timestamps_are_shown_in_utc_and_bad_values_do_not_crash():
 def test_the_file_name_is_a_safe_slug():
     assert analysisFileName("Joe's Pizza & Pasta!") == "reviewlens-joe-s-pizza-pasta-analysis.md"
     assert analysisFileName("***") == "reviewlens-target-analysis.md"
+    assert analysisFileName("Café Blue Bottle — Mint Plaza") == "reviewlens-cafe-blue-bottle-mint-plaza-analysis.md"
 
 
 def test_unknown_values_say_not_recorded_instead_of_being_invented():
