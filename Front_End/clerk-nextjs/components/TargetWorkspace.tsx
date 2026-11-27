@@ -117,7 +117,12 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
     <div className="space-y-8">
       {back}
 
-      <Section title={target.name} hint="Workspace for this analysis target.">
+      <div className="relative">
+        {/* The Markdown export covers the whole analysis, so it sits level with the target name. */}
+        <div className="mb-3 sm:absolute sm:right-0 sm:top-0 sm:mb-0">
+          <ExportAnalysisButton target={target} />
+        </div>
+        <Section title={target.name} hint="Workspace for this analysis target.">
         <Card>
           <dl className="grid gap-4 sm:grid-cols-2">
             <Detail label="Target name">{target.name}</Detail>
@@ -130,7 +135,8 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
             <Detail label="Created">{formatDate(target.createdAt)}</Detail>
           </dl>
         </Card>
-      </Section>
+        </Section>
+      </div>
 
             <Section title="Ingestion summary">
                 <Card className="space-y-4">
@@ -183,7 +189,6 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
                         <p className="text-sm text-zinc-400">Newest first.</p>
                     </div>
                     <div className="flex flex-wrap items-start gap-3">
-                        <ExportAnalysisButton target={target} />
                         <ExportReviewsButton target={target} />
                     </div>
                 </div>
