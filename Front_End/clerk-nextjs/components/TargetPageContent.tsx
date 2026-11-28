@@ -17,7 +17,7 @@ function TargetPage({ id }: { id: string }) {
   const [target, setTarget] = useState<AnalysisTarget | undefined>();
   return (
     <div className="flex flex-col gap-8">
-      <TargetSwitcher activeId={id} />
+      <TargetSwitcher activeId={id} activeName={target?.name} />
       <TargetWorkspace id={id} onLoaded={setTarget} />
       <ReviewQA targetId={id} targetName={target?.name} blockedReason={qaBlockedReason(target)} />
     </div>

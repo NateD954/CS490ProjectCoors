@@ -6,7 +6,7 @@ import { listTargets } from "@/lib/targets-service";
 
 // S2-017 TargetSwitcher: dropdown of your own targets. Loads them (or shows an error if the load fails)
 // and opens the one you pick. The backend only returns the signed-in user's targets.
-export function TargetSwitcher({ activeId }: { activeId: string }) {
+export function TargetSwitcher({ activeId, activeName }: { activeId: string; activeName?: string }) {
   const router = useRouter();
   const [targets, setTargets] = useState<AnalysisTarget[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -41,7 +41,7 @@ export function TargetSwitcher({ activeId }: { activeId: string }) {
         {!activeIsKnown && <option value="">Select a target…</option>}
         {targets.map((t) => (
           <option key={t.id} value={t.id}>
-            {t.name}
+            {t.id === activeId && activeName ? activeName : t.name}
           </option>
         ))}
       </select>
