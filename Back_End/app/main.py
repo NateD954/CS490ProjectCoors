@@ -15,6 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from httpx import HTTPError
 from postgrest.exceptions import APIError
+
+from app.target_rename import updateTargetName
+
 from app.analysis_names import cleanName
 
 from app.db import supabaseClient
@@ -178,6 +181,24 @@ def listTargets(userId: str = Depends(getCurrentUserId)):
 @app.get("/api/targets/{targetId}")
 def getTarget(targetId: str, userId: str = Depends(getCurrentUserId)):
     target = withIngestionStatus([verifyTargetOwnership(targetId, userId)])[0]
+    target["review_summary"] = getReviewSummary(supabaseClient, targetId)
+    return target
+
+class TargetRenameRequest(BaseModel):
+    name: str
+
+@app.patch("/api/targets/{targetId}")
+def renameTarget(targetId: str, body: TargetRenameRequest, userId: str = Depends(getCurrentUserId)):
+    """S3-002: change only the name shown to the user."""
+    verifyTargetOwnership(targetId, userId)  # first, so another user never learns whether a name is valid
+    name, nameProblem = cleanName(body.name)
+    if nameProblem:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=[fieldError("name", nameProblem)])
+
+    updated = updateTargetName(supabaseClient, targetId, userId, name)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found. Please check the target ID and try again.")
+    target = withIngestionStatus([updated])[0]
     target["review_summary"] = getReviewSummary(supabaseClient, targetId)
     return target
 

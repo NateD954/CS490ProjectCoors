@@ -12,6 +12,7 @@ import { ReviewList } from "./ReviewList";
 import { useToast } from "./ui/Toast";
 import { ExportReviewsButton } from "./ExportReviewsButton";
 import { ExportAnalysisButton } from "./ExportAnalysisButton";
+import { RenameTarget } from "./RenameTarget";
 
 type LoadState = "loading" | "ready" | "missing" | "error";
 
@@ -72,6 +73,14 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
     }
   }
 
+  // S3-002: after a rename, show the new name here and tell the page (dropdown, Q&A)
+  function handleRenamed(name: string) {
+    if (!target) return;
+    const renamed = { ...target, name };
+    setTarget(renamed);
+    onLoaded?.(renamed);
+  }
+
   const back = (
     <Link href="/home" className="text-sm text-violet-400 hover:text-violet-300">
       ← Back to all targets
@@ -125,7 +134,9 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
         <Section title={target.name} hint="Workspace for this analysis target.">
         <Card>
           <dl className="grid gap-4 sm:grid-cols-2">
-            <Detail label="Target name">{target.name}</Detail>
+            <Detail label="Target name">
+              <RenameTarget id={target.id} name={target.name} onRenamed={handleRenamed} />
+            </Detail>
             <Detail label="Review platform">{target.platform}</Detail>
             <Detail label="Source">
               <a href={target.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 underline hover:text-violet-300">
