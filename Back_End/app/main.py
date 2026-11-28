@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from httpx import HTTPError
 from postgrest.exceptions import APIError
+from app.analysis_names import cleanName
 
 from app.db import supabaseClient
 from app.auth import getCurrentUserId
@@ -154,13 +155,13 @@ def verifyTargetOwnership(targetId: str, authenticatedUserId: str) -> dict:
 
 @app.post("/api/targets", status_code=status.HTTP_201_CREATED)
 def createTarget(body: TargetCreateRequest, userId: str = Depends(getCurrentUserId)):
-    name = body.name.strip()
+    name, nameProblem = cleanName(body.name)
     sourceUrl = body.sourceUrl.strip()
     dataId = getGoogleDataIdFromURL(sourceUrl)
 
     errors = []
-    if not name:
-        errors.append(fieldError("name", "Enter the business or location name."))
+    if nameProblem:
+        errors.append(fieldError("name", nameProblem))
     if not isGoogleUrl(sourceUrl) or not dataId:
         errors.append(fieldError("sourceUrl", "Enter the full Google Maps link for the place."))
     if body.platform != "GOOGLE_MAPS":

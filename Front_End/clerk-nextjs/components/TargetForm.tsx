@@ -4,6 +4,7 @@ import type { AnalysisTarget } from "@/lib/types";
 import { TEAM_PLATFORM } from "@/lib/config";
 import { hasErrors, validateTargetInput, type FieldErrors } from "@/lib/validation";
 import { createTarget, TargetValidationError } from "@/lib/targets-service";
+import { suggestNameFromUrl } from "@/lib/suggest-name";
 import { Card } from "./ui/Card";
 import { Button } from "./ui/Button";
 import { TextField } from "./ui/TextField";
@@ -13,6 +14,7 @@ export function TargetForm({ onCreated }: { onCreated: (target: AnalysisTarget) 
   const toast = useToast();
   const [name, setName] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [nameEdited, setNameEdited] = useState(false); // S3-001: true once the user types their own name
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -33,6 +35,7 @@ export function TargetForm({ onCreated }: { onCreated: (target: AnalysisTarget) 
       const target = await createTarget({ name, sourceUrl });
       setName("");
       setSourceUrl("");
+      setNameEdited(false);
       onCreated(target);
     } catch (err) {
       if (err instanceof TargetValidationError) {
@@ -55,8 +58,12 @@ export function TargetForm({ onCreated }: { onCreated: (target: AnalysisTarget) 
           label="Business or location name"
           placeholder="e.g. Sample Coffee House"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameEdited(e.target.value !== ""); // clearing the box lets the link suggest a name again
+          }}
           error={errors.name}
+          hint={!nameEdited && name ? "Suggested from the link. Change it to any name you like." : undefined}
         />
         <TextField
           id="target-platform"
@@ -71,7 +78,10 @@ export function TargetForm({ onCreated }: { onCreated: (target: AnalysisTarget) 
           type="url"
           placeholder="https://www.google.com/maps/place/..."
           value={sourceUrl}
-          onChange={(e) => setSourceUrl(e.target.value)}
+          onChange={(e) => {
+            setSourceUrl(e.target.value);
+            if (!nameEdited) setName(suggestNameFromUrl(e.target.value)); // S3-001: suggest, never overwrite the user's name
+          }}
           error={errors.sourceUrl}
           hint={`Open the place in ${TEAM_PLATFORM.label} and copy the full URL from the address bar.`}
         />
