@@ -14,6 +14,7 @@ export function validateTargetInput(input: NewTargetInput): FieldErrors {
 
   if (!name) errors.name = "Enter the business or location name.";
   else if (name.length > MAX_NAME_LENGTH) errors.name = `Keep the name under ${MAX_NAME_LENGTH} characters.`;
+  else if (!/[\p{L}\p{N}]/u.test(name)) errors.name = "Use at least one letter or number in the name."; // S3-001
 
   if (!url) {
     errors.sourceUrl = "Enter the link to the reviews.";
