@@ -13,6 +13,7 @@ import { useToast } from "./ui/Toast";
 import { ExportReviewsButton } from "./ExportReviewsButton";
 import { ExportAnalysisButton } from "./ExportAnalysisButton";
 import { RenameTarget } from "./RenameTarget";
+import { SaveAsTarget } from "./SaveAsTarget";
 
 type LoadState = "loading" | "ready" | "missing" | "error";
 
@@ -136,6 +137,9 @@ export function TargetWorkspace({ id, onLoaded }: { id: string; onLoaded?: (t: A
           <dl className="grid gap-4 sm:grid-cols-2">
             <Detail label="Target name">
               <RenameTarget id={target.id} name={target.name} onRenamed={handleRenamed} />
+            </Detail>
+            <Detail label="Save as">
+              <SaveAsTarget id={target.id} name={target.name} />
             </Detail>
             <Detail label="Review platform">{target.platform}</Detail>
             <Detail label="Source">
