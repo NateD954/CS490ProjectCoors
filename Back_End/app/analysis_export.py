@@ -17,9 +17,9 @@ STATUS_LABELS = {
     "failed": "Failed",
 }
 NOT_RECORDED = "Not recorded"
-# The history keeps only the question, the answer and the time. It does not record which
-# reviews backed an answer, so none are listed (nothing is invented to fill the gap).
-EVIDENCE_NOTE = "_The specific reviews behind each answer are not stored with the history, so no per-answer evidence is listed._"
+# This export lists only the question, the answer and the time. The reviews behind an answer
+# are shown in the app, not here (nothing is invented to fill the gap).
+EVIDENCE_NOTE = "_The specific reviews behind each answer are not included in this export._"
 
 _SPECIAL = re.compile(r"([\\`*_\[\]<>#|])")
 

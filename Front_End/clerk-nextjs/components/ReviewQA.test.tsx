@@ -77,6 +77,75 @@ describe("ReviewQA", () => {
     expect(await screen.findByText("Free lot behind the building.")).toBeTruthy();
   });
 
+  // S3-013
+  const review = (n: number) => ({
+    id: `r${n}`,
+    rating: 4,
+    review_text: `Stored review ${n}`,
+    reviewed_at: "2026-01-05T12:00:00+00:00",
+  });
+
+  it("shows the supporting reviews returned with a new answer", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).endsWith("/history")) {
+        return { ok: true, json: async () => [] };
+      }
+      return {
+        ok: true,
+        json: async () => ({ id: "m1", answer: "People love the tacos.", supporting_reviews: [review(1), review(2)] }),
+      };
+    });
+    const { input } = setup();
+
+    ask(input, "What do people like?");
+
+    expect(await screen.findByText("Supporting reviews")).toBeTruthy();
+    expect(screen.getByText("Stored review 1")).toBeTruthy();
+    expect(screen.getByText("Stored review 2")).toBeTruthy();
+    expect(screen.getAllByRole("img", { name: "4 out of 5 stars" })).toHaveLength(2);
+  });
+
+  it("shows supporting reviews again for restored history, at most five per answer", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).endsWith("/history")) {
+        return {
+          ok: true,
+          json: async () => [
+            { id: "m1", question: "Q one", answer: "A one", supporting_reviews: [1, 2, 3, 4, 5, 6].map(review) },
+            { id: "m2", question: "Q two", answer: "A two", supporting_reviews: [] },
+          ],
+        };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    setup();
+
+    expect(await screen.findByText("Stored review 5")).toBeTruthy();
+    expect(screen.queryByText("Stored review 6")).toBeNull();
+    expect(screen.getAllByText("Supporting reviews")).toHaveLength(1); // none under the second answer
+  });
+
+  it("shows a single supporting review when only one is valid, and none when there are none", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).endsWith("/history")) {
+        return {
+          ok: true,
+          json: async () => [
+            { id: "m1", question: "Q one", answer: "A one", supporting_reviews: [review(1)] },
+            { id: "m2", question: "Q two", answer: "A two" },
+          ],
+        };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    setup();
+
+    expect(await screen.findByText("Stored review 1")).toBeTruthy();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  });
+
   it("clears persisted Q&A history when Clear Q&A History is clicked", async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (String(url).endsWith("/history") && init?.method === "DELETE") {

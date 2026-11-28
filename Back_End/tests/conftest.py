@@ -144,7 +144,8 @@ class Call:
         assert head.startswith("Review Evidence:\n"), "The prompt has no 'Review Evidence:' section."
         lines = head[len("Review Evidence:\n"):].split("\n")
         assert all(line.startswith("- ") for line in lines), f"Evidence lines must start with '- ': {lines}"
-        return [line[2:] for line in lines]
+        # S3-013: each line ends with a tag such as " [R3]", which is not part of the review text.
+        return [re.sub(r" \[R\d+\]$", "", line[2:]) for line in lines]
 
     @property
     def question(self):
