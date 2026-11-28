@@ -17,7 +17,7 @@ from httpx import HTTPError
 from postgrest.exceptions import APIError
 
 from app.target_rename import updateTargetName
-
+from app.target_copy import copyTarget
 from app.analysis_names import cleanName
 
 from app.db import supabaseClient
@@ -200,6 +200,26 @@ def renameTarget(targetId: str, body: TargetRenameRequest, userId: str = Depends
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found. Please check the target ID and try again.")
     target = withIngestionStatus([updated])[0]
     target["review_summary"] = getReviewSummary(supabaseClient, targetId)
+    return target
+
+class TargetSaveAsRequest(BaseModel):
+    name: str
+
+@app.post("/api/targets/{targetId}/save-as", status_code=status.HTTP_201_CREATED)
+def saveTargetAs(targetId: str, body: TargetSaveAsRequest, userId: str = Depends(getCurrentUserId)):
+    """S3-003: make a separate analysis from this one. Reviews are copied, Q&A history is not."""
+    source = verifyTargetOwnership(targetId, userId)  # first, so another user never learns whether a name is valid
+    name, nameProblem = cleanName(body.name)
+    if nameProblem:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=[fieldError("name", nameProblem)])
+
+    try:
+        copied = copyTarget(supabaseClient, source, userId, name)
+    except Exception as error:
+        logger.warning("Save As failed for target %s: %s", targetId, type(error).__name__)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not save the copy. Please try again.")
+    target = withIngestionStatus([copied])[0]
+    target["review_summary"] = getReviewSummary(supabaseClient, copied["id"])
     return target
 
 @app.get("/api/targets/{targetId}/reviews")

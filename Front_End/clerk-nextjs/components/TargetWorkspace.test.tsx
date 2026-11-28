@@ -14,6 +14,7 @@ const toast = vi.hoisted(() => ({
 }));
 
 vi.mock("./ui/Toast", () => ({ useToast: () => toast }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/lib/targets-service", () => ({
   getTarget: vi.fn(),
   startIngestion: vi.fn(),
