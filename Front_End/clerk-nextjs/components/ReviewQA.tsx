@@ -2,13 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { formatDate } from "@/lib/format";
+import { Stars } from "./ReviewList";
+
+// S3-013: a stored review that backs an answer. The backend reads these from the
+// active target's reviews, so the text and rating are never written by the AI.
+export interface SupportingReview {
+  id: string;
+  rating: number;
+  review_text: string;
+  reviewed_at: string | null;
+}
 
 export interface QAHistoryEntry {
   id?: string;
   question: string;
   answer: string;
   created_at?: string;
+  supporting_reviews?: SupportingReview[];
 }
+
+const MAX_SUPPORTING_REVIEWS = 5;
 
 export default function ReviewQA({
   targetId,
@@ -101,6 +115,7 @@ export default function ReviewQA({
             question: data.question ?? trimmedQuestion,
             answer: data.answer,
             created_at: data.created_at,
+            supporting_reviews: data.supporting_reviews,
           },
         ],
       }));
@@ -206,6 +221,24 @@ export default function ReviewQA({
             <div key={entry.id ?? idx} className="bg-zinc-950 p-4 rounded-md border border-zinc-800 space-y-2">
               <p className="text-sm font-medium text-blue-400">Q: {entry.question}</p>
               <p className="text-zinc-300 whitespace-pre-wrap">{entry.answer}</p>
+              {Array.isArray(entry.supporting_reviews) && entry.supporting_reviews.length > 0 && (
+                <div className="pt-2 border-t border-zinc-800">
+                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Supporting reviews</p>
+                  <ul className="mt-2 space-y-2">
+                    {entry.supporting_reviews.slice(0, MAX_SUPPORTING_REVIEWS).map((review) => (
+                      <li key={review.id} className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Stars rating={review.rating} />
+                          {review.reviewed_at && (
+                            <span className="text-xs text-zinc-400">{formatDate(review.reviewed_at)}</span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-zinc-300 whitespace-pre-wrap">{review.review_text}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ))}
         </div>

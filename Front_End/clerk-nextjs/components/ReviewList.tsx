@@ -10,7 +10,7 @@ import { useToast } from "./ui/Toast";
 
 type LoadState = "loading" | "ready" | "error";
 
-function Stars({ rating }: { rating: number }) {
+export function Stars({ rating }: { rating: number }) {
   return (
     <span className="text-amber-400" role="img" aria-label={`${rating} out of 5 stars`}>
       {"★".repeat(rating)}

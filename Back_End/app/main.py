@@ -3,6 +3,7 @@ import requests
 import os
 import csv
 import io
+import re
 from fastapi.responses import Response
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone
@@ -60,6 +61,31 @@ class IngestionInputError(ValueError):
 # The key is sent in a header, never in the URL, so it cannot end up in logs or error text.
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent"
 GEMINI_TIMEOUT_SECONDS = 45
+
+# S3-013: the model names the reviews behind its answer by tag, on a last line like "EVIDENCE: R2, R7".
+# Only the tags are trusted. The review text and rating shown to the user are read from the database.
+MAX_SUPPORTING_REVIEWS = 5
+SUPPORTING_REVIEW_FIELDS = "id,rating,review_text,reviewed_at"
+EVIDENCE_LINE = re.compile(r"^[ \t]*EVIDENCE:(.*)$", re.IGNORECASE | re.MULTILINE)
+
+
+def supportingReview(row: dict) -> dict:
+    return {field: row.get(field) for field in SUPPORTING_REVIEW_FIELDS.split(",")}
+
+
+def splitAnswerAndEvidence(text: str, cited: dict) -> tuple:
+    """Returns the answer without its EVIDENCE line, and the stored reviews that line names.
+    `cited` maps each tag number sent to the model to its review row. Tags that were not sent
+    in this request (invented, or from another target) match nothing and are dropped."""
+    lines = EVIDENCE_LINE.findall(text)
+    if not lines:
+        return text, []
+    reviews = []
+    for number in re.findall(r"\bR(\d+)\b", lines[-1]):
+        review = cited.get(int(number))
+        if review and review.get("id") and review not in reviews:
+            reviews.append(review)
+    return EVIDENCE_LINE.sub("", text).strip(), [supportingReview(r) for r in reviews[:MAX_SUPPORTING_REVIEWS]]
 
 JOB_STATUS_TO_UI = {"pending": "in_progress", "running": "in_progress", "completed": "completed", "failed": "failed"}
 STALE_JOB_AFTER = timedelta(minutes=10)
@@ -314,7 +340,7 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
     target = verifyTargetOwnership(targetId, userId)
 
     res = (
-        supabaseClient.table("reviews").select("review_text")
+        supabaseClient.table("reviews").select(SUPPORTING_REVIEW_FIELDS)
         .eq("analysis_target_id", targetId)
         .order("ingested_at", desc=True).order("id")
         .execute()
@@ -324,7 +350,9 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
     if not reviews_data:
         return {"answer": "No reviews have been ingested for this target at the moment. Please ingest data first before asking questions."}
 
-    context_lines = [f"- {r.get('review_text')}" for r in reviews_data[:50] if r.get("review_text")]
+    # Each review sent to the model gets a short tag, so the model can say which ones it used.
+    cited = dict(enumerate((r for r in reviews_data[:50] if r.get("review_text")), start=1))
+    context_lines = [f"- {r.get('review_text')} [R{number}]" for number, r in cited.items()]
     reviews_context = "\n".join(context_lines)
 
     if not reviews_context.strip():
@@ -342,6 +370,10 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
         "When declining, briefly explain that ReviewLens only analyzes "
         "the active business's provided reviews."
         "Respond in clean plain text only. Do not use markdown formatting such as asterisks (** or *), hashtags (#), or backticks."
+        " Each review ends with a tag such as [R3]. After the answer, add one final line in the form "
+        "'EVIDENCE: R2, R7' listing the tags of the two to five reviews that best support the answer. "
+        "Use only tags that appear in the review evidence. If you decline the question or the reviews "
+        "lack sufficient evidence, write 'EVIDENCE: none'. Do not mention the tags anywhere else."
     )
 
     apiKey = os.getenv("GEMINI_API_KEY")
@@ -358,7 +390,7 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
     try:
         response = requests.post(GEMINI_URL, headers={"x-goog-api-key": apiKey}, json=payload, timeout=GEMINI_TIMEOUT_SECONDS)
         response.raise_for_status()
-        answer = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        answer, supporting = splitAnswerAndEvidence(response.json()["candidates"][0]["content"]["parts"][0]["text"], cited)
     except requests.RequestException as e:
         # Log only the error type: the text of these errors can include request details.
         logger.warning("AI provider request failed: %s", type(e).__name__)
@@ -374,6 +406,7 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
                 "analysis_target_id": targetId,
                 "question": request.question,
                 "answer": answer,
+                "supporting_review_ids": [r["id"] for r in supporting],
                 "created_at": nowIso(),
             })
             .execute()
@@ -386,11 +419,12 @@ def ask_review_question(targetId: str, request: QuestionRequest, userId: str = D
                 "question": saved.get("question", request.question),
                 "answer": saved.get("answer", answer),
                 "created_at": saved.get("created_at"),
+                "supporting_reviews": supporting,
             }
     except KeyError:
         # Older test harnesses mock only analysis_targets and reviews tables
         pass
-    return {"answer": answer}
+    return {"answer": answer, "supporting_reviews": supporting} if supporting else {"answer": answer}
 
 
 @app.get("/api/targets/{targetId}/history")
@@ -398,13 +432,33 @@ def get_qa_history(targetId: str, userId: str = Depends(getCurrentUserId)):
     verifyTargetOwnership(targetId, userId)
     res = (
         supabaseClient.table("qa_history")
-        .select("id,analysis_target_id,question,answer,created_at")
+        .select("id,analysis_target_id,question,answer,created_at,supporting_review_ids")
         .eq("analysis_target_id", targetId)
         .order("created_at", desc=False)
         .order("id", desc=False)
         .execute()
     )
-    return res.data or []
+    entries = res.data or []
+
+    # S3-013: only review ids are saved with an answer. The reviews are read again here, limited
+    # to this target, so an id from another target or a deleted review shows nothing.
+    ids = sorted({i for e in entries for i in (e.get("supporting_review_ids") or [])})
+    found = {}
+    for start in range(0, len(ids), 100):
+        rows = (
+            supabaseClient.table("reviews")
+            .select(SUPPORTING_REVIEW_FIELDS)
+            .eq("analysis_target_id", targetId)
+            .in_("id", ids[start:start + 100])
+            .execute()
+            .data
+            or []
+        )
+        found.update({r["id"]: supportingReview(r) for r in rows})
+    for e in entries:
+        saved = (e.pop("supporting_review_ids", None) or [])[:MAX_SUPPORTING_REVIEWS]
+        e["supporting_reviews"] = [found[i] for i in saved if i in found]
+    return entries
 
 
 @app.delete("/api/targets/{targetId}/history", status_code=status.HTTP_204_NO_CONTENT)
